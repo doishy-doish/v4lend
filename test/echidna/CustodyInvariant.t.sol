@@ -295,6 +295,11 @@ contract CustodyInvariant is BaseTest {
             migrationActions
         );
         vm.etch(flags, abi.encodePacked(type(RevertHook).creationCode, constructorArgs));
+        // deployCodeTo semantics, done manually (vm.getCode unsupported):
+        // run the init code once, then etch the returned runtime.
+        (bool initOk, bytes memory runtimeCode) = flags.call("");
+        require(initOk, "hook init failed");
+        vm.etch(flags, runtimeCode);
         stack.hook = RevertHook(payable(flags));
     }
 
