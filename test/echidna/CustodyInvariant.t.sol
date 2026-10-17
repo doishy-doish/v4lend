@@ -225,7 +225,7 @@ contract CustodyInvariant is BaseTest {
 
     // ==================== invariants ====================
 
-    function echidna_custody_conserved() public view returns (bool) {
+    function property_custody_conserved() public view returns (bool) {
         for (uint256 v = 0; v < vaults.length; v++) {
             uint256 recorded;
             for (uint256 i = 0; i < tokenIds.length; i++) {
@@ -242,7 +242,7 @@ contract CustodyInvariant is BaseTest {
         return Currency.unwrap(k.currency0) == t || Currency.unwrap(k.currency1) == t;
     }
 
-    function echidna_debt_shares_conserved() public view returns (bool) {
+    function property_debt_shares_conserved() public view returns (bool) {
         for (uint256 t = 0; t < tokens.length; t++) {
             (,, uint192 recorded) = lendVault.tokenConfigs(tokens[t]);
             uint256 summed;
@@ -261,7 +261,7 @@ contract CustodyInvariant is BaseTest {
         return true;
     }
 
-    function echidna_solvent() public view returns (bool) {
+    function property_solvent() public view returns (bool) {
         (uint256 debt, uint256 lent, uint256 balance,,,) = lendVault.vaultInfo();
         return lent <= balance + debt;
     }
