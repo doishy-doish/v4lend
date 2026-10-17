@@ -43,9 +43,11 @@ jobs:
         run: |
           set +e
           export PATH=$PATH:$HOME/go/bin
-          medusa fuzz --config medusa.json --timeout 300 --test-limit 0 > medusa-out.txt 2>&1
+          medusa --version > medusa-out.txt 2>&1
+          medusa fuzz --config medusa.json --timeout 300 --test-limit 0 >> medusa-out.txt 2>&1
           echo "EXIT=$?" >> medusa-out.txt
-          tail -c 15000 medusa-out.txt > medusa-tail.txt || cp medusa-out.txt medusa-tail.txt
+          wc -c medusa-out.txt >> medusa-out.txt
+          tail -c 60000 medusa-out.txt > medusa-tail.txt || cp medusa-out.txt medusa-tail.txt
           git config user.name "medusa-bot"
           git config user.email "medusa-bot@local"
           git add -f medusa-tail.txt
