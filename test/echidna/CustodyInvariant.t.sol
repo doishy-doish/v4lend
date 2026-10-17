@@ -199,14 +199,6 @@ contract CustodyInvariant is BaseTest {
         wethVault.setRedeemCap(cap % (shares + 1));
     }
 
-    function act_withdraw(uint256 frac) external {
-        (,,,, uint256 shares,,,) = hook.positionStates(tokenId);
-        if (shares == 0) return;
-        uint256 slice = (shares * (frac % 100)) / 100;
-        if (slice == 0) return;
-        hook.autoLendWithdraw(poolKey, tokenId, slice);
-    }
-
     function act_newPosition(uint8 width) external {
         int24 spacing = poolKey.tickSpacing;
         int24 base = _getTickLower(_getCurrentTick(), spacing);
