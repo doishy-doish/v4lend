@@ -1,0 +1,33 @@
+name: echidna
+on:
+  workflow_dispatch:
+    inputs:
+      contract:
+        description: 'Harness contract name'
+        required: true
+        default: 'CustodyInvariant'
+      test_limit:
+        description: 'Echidna testLimit'
+        required: true
+        default: '10000'
+
+jobs:
+  echidna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Build
+        run: forge build --skip test --skip script
+      - uses: crytic/echidna-action@v2
+        with:
+          files: test/echidna
+          contract: ${{ github.event.inputs.contract }}
+          config: echidna.yaml
+          test-limit: ${{ github.event.inputs.test_limit }}
+          solc-version: 0.8.30
