@@ -29,6 +29,8 @@ jobs:
         run: forge build --skip test --skip script
       - name: Install Medusa
         run: medusa --version || true
+      - name: Install crytic-compile
+        run: pip install crytic-compile
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
