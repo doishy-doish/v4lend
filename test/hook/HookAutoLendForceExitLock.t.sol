@@ -18,6 +18,7 @@ import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {NativeWrapper} from "@uniswap/v4-periphery/src/base/NativeWrapper.sol";
 import {IWETH9} from "@uniswap/v4-periphery/src/interfaces/external/IWETH9.sol";
 
@@ -207,5 +208,38 @@ contract HookAutoLendForceExitLockTest is BaseTest {
         // 5. The exit stays bricked: no state accumulates toward recovery.
         vm.expectRevert(bytes("ERC4626: redeem more than max"));
         hook.autoLendForceExit(tokenId);
+    }
+
+    function _mintPositionEth(PoolKey memory key, int24 tickLower, int24 tickUpper, uint128 liquidity)
+        internal
+        returns (uint256 newTokenId)
+    {
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
+        bytes[] memory params = new bytes[](3);
+        params[0] = abi.encode(
+            key, tickLower, tickUpper, liquidity, type(uint256).max, type(uint256).max, address(this), bytes("")
+        );
+        params[1] = abi.encode(key.currency0, key.currency1, address(this));
+        params[2] = abi.encode(address(0), address(this));
+
+        positionManager.modifyLiquidities{value: 100 ether}(abi.encode(actions, params), block.timestamp);
+        newTokenId = positionManager.nextTokenId() - 1;
+    }
+
+    function _swapExactInputSingleEth(PoolKey memory key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut)
+        internal
+    {
+        swapRouter.swapExactTokensForTokens{value: zeroForOne ? amountIn : 0}(
+            amountIn, minAmountOut, zeroForOne, key, bytes(""), address(this), block.timestamp
+        );
+    }
+
+    function _getCurrentTick() internal view returns (int24 tick) {
+        (, tick,,) = StateLibrary.getSlot0(poolManager, poolKey.toId());
+    }
+
+    function _getTickLower(int24 tick, int24 tickSpacing) internal pure returns (int24) {
+        return tick < 0 && tick % tickSpacing != 0 ? (tick / tickSpacing - 1) * tickSpacing : (tick / tickSpacing) * tickSpacing;
     }
 }
