@@ -134,30 +134,13 @@ contract CustodyInvariant is BaseTest {
             hooks: IHooks(hook)
         });
 
-        poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
-        v4Oracle.setPoolKey(address(0), address(token1), poolKey);
-
-        // BISECT-1: everything below this line is disabled to isolate the
-        // deploy-time halt (suspect: gas ceiling on the giant constructor).
-        // If deployment succeeds, re-enable in halves.
-        /*
-        vm.deal(address(this), 1_000 ether);
-        _mintPositionEth(poolKey, TickMath.minUsableTick(poolKey.tickSpacing), TickMath.maxUsableTick(poolKey.tickSpacing), 100e18);
-
-        int24 currentTick = _getCurrentTick();
-        int24 tickLower = _getTickLower(currentTick, poolKey.tickSpacing) - poolKey.tickSpacing;
-        int24 tickUpper = _getTickLower(currentTick, poolKey.tickSpacing) + poolKey.tickSpacing;
-        tokenId = _mintPositionEth(poolKey, tickLower, tickUpper, 100e18);
-        tokenIds.push(tokenId);
-        owners.push(address(this));
-
-        hook.setPositionConfig(tokenId, _lendConfig());
-        IERC721(address(positionManager)).setApprovalForAll(address(hook), true);
-
         vaults.push(address(wethVault));
         vaults.push(address(token1Vault));
         tokens.push(address(0));
         tokens.push(address(token1));
+        owners.push(address(this));
+
+        vm.deal(address(this), 1_000_000 ether);
 
         InterestRateModel irm = new InterestRateModel(0, 0, 0, 0);
         lendVault = new V4Vault("WETH lending vault", "lWETH", address(weth), positionManager, irm, v4Oracle, weth);
@@ -171,7 +154,29 @@ contract CustodyInvariant is BaseTest {
         weth.deposit{value: 20e18}();
         IERC20(address(weth)).approve(address(lendVault), 20e18);
         lendVault.deposit(20e18, address(this));
-        */
+    }
+
+    /// @dev Lazy pool setup: poolManager.initialize halts the hevm deployment
+    ///      trace, so pool init + seeding + config happen in the first fuzz
+    ///      calls instead of the constructor. Idempotent; harness is the actor.
+    bool internal initialized;
+
+    function act_setup() external {
+        if (initialized) return;
+        initialized = true;
+        poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
+        v4Oracle.setPoolKey(address(0), address(token1), poolKey);
+
+        _mintPositionEth(poolKey, TickMath.minUsableTick(poolKey.tickSpacing), TickMath.maxUsableTick(poolKey.tickSpacing), 100e18);
+
+        int24 currentTick = _getCurrentTick();
+        int24 tickLower = _getTickLower(currentTick, poolKey.tickSpacing) - poolKey.tickSpacing;
+        int24 tickUpper = _getTickLower(currentTick, poolKey.tickSpacing) + poolKey.tickSpacing;
+        tokenId = _mintPositionEth(poolKey, tickLower, tickUpper, 100e18);
+        tokenIds.push(tokenId);
+
+        hook.setPositionConfig(tokenId, _lendConfig());
+        IERC721(address(positionManager)).setApprovalForAll(address(hook), true);
     }
 
     function _lendConfig() internal pure returns (RevertHookState.PositionConfig memory) {
