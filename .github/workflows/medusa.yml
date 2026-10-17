@@ -30,7 +30,7 @@ jobs:
       - name: Install Medusa
         run: medusa --version || true
       - name: Install crytic-compile
-        run: pip install crytic-compile
+        run: pip install crytic-compile slither-analyzer
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
