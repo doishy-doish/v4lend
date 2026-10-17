@@ -1,11 +1,19 @@
 [1m[32m⇾[0m[0m [1mReading the configuration file at: [1mmedusa.json[0m[0m
 [1m[32m⇾[0m[0m [1mCompiling targets with [1mcrytic-compile[0m[0m
 [1m[32m⇾[0m[0m [1mRunning command:
-crytic-compile . --export-format solc[0m
-[1m[31merror[0m[0m [1mFailed to compile target[31m
-‣ error while executing crytic-compile:
-OUTPUT:
-
-ERROR: exec: "crytic-compile": executable file not found in $PATH
-[0m[0m
+/home/runner/.local/bin/crytic-compile . --export-format solc[0m
+[1m[32m⇾[0m[0m [1mFinished compiling targets in 41s[0m
+[1m[32m⇾[0m[0m [1m[1martifacts: [0mMedusa is running against a [1m[32mnew[0m[0m set of build artifacts[0m
+[1m[32m⇾[0m[0m [1mNo Slither cached results found at slither_results.json[0m
+[1m[32m⇾[0m[0m [1mRunning Slither:
+slither . --ignore-compile --print echidna --json -[0m
+[1m[33mwarn[0m[0m [1mFailed to run slither[31m
+‣ exec: "slither": executable file not found in $PATH[0m[0m
+[1m[32m⇾[0m[0m [1mRunning with a timeout of [1m300[0m[1m seconds[0m[0m
+[1m[32m⇾[0m[0m [1mSetting up test chain[0m
+[1m[32m⇾[0m[0m [1mFinished setting up test chain[0m
+[1m[32m⇾[0m[0m [1mCreating corpus...[0m
+[1m[32m⇾[0m[0m [1mFuzzing with [1m10[0m workers[0m
+[1m[31merror[0m[0m [1mFailed to start fuzzer[31m
+‣ no assertion, property, optimization, or custom tests were found to fuzz[0m[0m
 EXIT=6
