@@ -1,0 +1,39 @@
+name: medusa
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Timeout in seconds'
+        required: true
+        default: '1800'
+      test_limit:
+        description: 'Medusa testLimit (0 = unlimited until timeout)'
+        required: true
+        default: '0'
+
+jobs:
+  medusa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Build
+        run: forge build --skip test --skip script
+      - name: Install Medusa
+        run: |
+          go install github.com/crytic/medusa@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+      - name: Run Medusa
+        run: |
+          medusa fuzz --config medusa.json --timeout ${{ github.event.inputs.timeout }} --test-limit ${{ github.event.inputs.test_limit }}
+      - name: Upload corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medusa-corpus
+          path: medusa-corpus/
