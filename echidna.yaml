@@ -1,4 +1,4 @@
-testMode: assertion
+testMode: property
 testLimit: 10000
 seqLen: 100
 shrinkLimit: 5000
