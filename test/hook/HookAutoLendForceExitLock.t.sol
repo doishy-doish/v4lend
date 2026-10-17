@@ -53,6 +53,7 @@ contract CappedERC4626Vault is MockERC4626Vault {
 }
 
 /// @notice Demonstrates the hook autoLendForceExit custody lock (V4LE-96 variant).
+/// @dev CI trigger commit: pushes to main run test.yml (mock suites + this file).
 /// @dev On the current code every assertion below PASSES: forceExit reverts,
 ///      disabling releases nothing, and the exit stays bricked. After the fix
 ///      (bounded redeem + residual-share transfer, mirroring AutoLend.forceExit),
