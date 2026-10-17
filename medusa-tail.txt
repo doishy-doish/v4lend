@@ -2,7 +2,7 @@
 [1m[32m⇾[0m[0m [1mCompiling targets with [1mcrytic-compile[0m[0m
 [1m[32m⇾[0m[0m [1mRunning command:
 /home/runner/.local/bin/crytic-compile . --export-format solc[0m
-[1m[32m⇾[0m[0m [1mFinished compiling targets in 35s[0m
+[1m[32m⇾[0m[0m [1mFinished compiling targets in 36s[0m
 [1m[32m⇾[0m[0m [1m[1martifacts: [0mMedusa is running against a [1m[32mnew[0m[0m set of build artifacts[0m
 [1m[32m⇾[0m[0m [1mNo Slither cached results found at slither_results.json[0m
 [1m[32m⇾[0m[0m [1mRunning Slither:
