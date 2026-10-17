@@ -21,7 +21,8 @@
         "testPrefixes": [
           "echidna_"
         ]
-      }
+      },
+      "testAllContracts": true
     }
   }
 }
