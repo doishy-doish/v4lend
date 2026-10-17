@@ -247,7 +247,7 @@ contract CustodyInvariant is BaseTest {
     }
 
     function echidna_solvent() public view returns (bool) {
-        (uint256 debt, uint256 lent, uint256 balance,,,,) = lendVault.vaultInfo();
+        (uint256 debt, uint256 lent, uint256 balance,,,) = lendVault.vaultInfo();
         return lent <= balance + debt;
     }
 
