@@ -25,6 +25,12 @@ import {IWETH9} from "@uniswap/v4-periphery/src/interfaces/external/IWETH9.sol";
 import {RevertHook} from "src/RevertHook.sol";
 import {RevertHookState} from "src/hook/RevertHookState.sol";
 import {PositionModeFlags} from "src/hook/lib/PositionModeFlags.sol";
+import {RevertHookPositionActions} from "src/hook/RevertHookPositionActions.sol";
+import {RevertHookAutoLeverageActions} from "src/hook/RevertHookAutoLeverageActions.sol";
+import {RevertHookAutoLendActions} from "src/hook/RevertHookAutoLendActions.sol";
+import {RevertHookMigrationActions} from "src/hook/RevertHookMigrationActions.sol";
+import {RevertHookSwapActions} from "src/hook/RevertHookSwapActions.sol";
+import {HookAuctionController} from "src/hook/HookAuctionController.sol";
 import {HookFeeController} from "src/hook/HookFeeController.sol";
 import {HookRouteController} from "src/hook/HookRouteController.sol";
 import {LiquidityCalculator} from "src/shared/math/LiquidityCalculator.sol";
@@ -111,7 +117,7 @@ contract CustodyInvariant is BaseTest {
 
         v4Oracle = new MockV4Oracle(positionManager);
         // No makeAddr under echidna (vm.addr unsupported): fixed literal recipient.
-        RevertHookStack memory stack = deployRevertHookStack(flags, v4Oracle, address(uint160(0xFEE)));
+        RevertHookStack memory stack = _deployStackEchidna(flags, v4Oracle, address(uint160(0xFEE)));
         hook = stack.hook;
 
         wethVault = new CappedERC4626Vault(IERC20(address(weth)), "Capped Native Vault", "cWETH");
@@ -251,6 +257,46 @@ contract CustodyInvariant is BaseTest {
     }
 
     // ==================== local helpers ====================
+
+    /// @dev Echidna-safe copy of BaseTest._deployRevertHookStack: identical
+    ///      wiring, except the hook itself is etched from compile-time
+    ///      creation code instead of deployCodeTo (vm.getCode unsupported).
+    function _deployStackEchidna(address flags, MockV4Oracle v4Oracle_, address protocolFeeRecipient)
+        internal
+        returns (RevertHookStack memory stack)
+    {
+        stack.liquidityCalculator = new LiquidityCalculator();
+        stack.feeController = new HookFeeController(flags, protocolFeeRecipient, 200, 200);
+        stack.routeController = new HookRouteController(flags);
+        stack.auctionController = new HookAuctionController(flags, poolManager);
+
+        RevertHookSwapActions swapActions = new RevertHookSwapActions(v4Oracle_.poolManager(), stack.feeController);
+        RevertHookPositionActions positionActions = new RevertHookPositionActions(
+            permit2, v4Oracle_, stack.liquidityCalculator, stack.routeController, swapActions
+        );
+        RevertHookAutoLeverageActions autoLeverageActions = new RevertHookAutoLeverageActions(
+            permit2, v4Oracle_, stack.liquidityCalculator, stack.routeController, swapActions
+        );
+        stack.autoLendActions = new RevertHookAutoLendActions(
+            permit2, v4Oracle_, stack.liquidityCalculator, stack.feeController, stack.routeController, swapActions
+        );
+        RevertHookMigrationActions migrationActions = new RevertHookMigrationActions(
+            permit2, v4Oracle_, stack.liquidityCalculator, stack.routeController, swapActions
+        );
+
+        bytes memory constructorArgs = abi.encode(
+            address(this),
+            v4Oracle_,
+            stack.feeController,
+            stack.auctionController,
+            positionActions,
+            autoLeverageActions,
+            stack.autoLendActions,
+            migrationActions
+        );
+        vm.etch(flags, abi.encodePacked(type(RevertHook).creationCode, constructorArgs));
+        stack.hook = RevertHook(payable(flags));
+    }
 
     function _mintPositionEth(PoolKey memory key, int24 tickLower, int24 tickUpper, uint128 liquidity)
         internal
