@@ -84,16 +84,14 @@ contract CustodyInvariant is BaseTest {
     receive() external payable {}
 
     function deployPositionManager() internal override {
-        if (block.chainid == 31337) {
-            WETH wrappedNative = new WETH();
-            positionManager = IPositionManager(
-                V4PositionManagerDeployer.deploy(
-                    address(poolManager), address(permit2), 300_000, address(0), address(wrappedNative)
-                )
-            );
-        } else {
-            super.deployPositionManager();
-        }
+        // Fuzzing always runs local: never take BaseTest's fork branch, which
+        // needs MAINNET_RPC_URL and reverts the harness constructor under echidna.
+        WETH wrappedNative = new WETH();
+        positionManager = IPositionManager(
+            V4PositionManagerDeployer.deploy(
+                address(poolManager), address(permit2), 300_000, address(0), address(wrappedNative)
+            )
+        );
     }
 
     constructor() {
