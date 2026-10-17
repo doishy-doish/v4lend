@@ -110,7 +110,8 @@ contract CustodyInvariant is BaseTest {
         );
 
         v4Oracle = new MockV4Oracle(positionManager);
-        RevertHookStack memory stack = deployRevertHookStack(flags, v4Oracle, makeAddr("protocolFeeRecipient"));
+        // No makeAddr under echidna (vm.addr unsupported): fixed literal recipient.
+        RevertHookStack memory stack = deployRevertHookStack(flags, v4Oracle, address(uint160(0xFEE)));
         hook = stack.hook;
 
         wethVault = new CappedERC4626Vault(IERC20(address(weth)), "Capped Native Vault", "cWETH");
