@@ -229,14 +229,15 @@ contract CustodyInvariant is BaseTest {
 
     function echidna_debt_shares_conserved() public view returns (bool) {
         for (uint256 t = 0; t < tokens.length; t++) {
-            uint192 recorded = lendVault.tokenConfigs(tokens[t]).totalDebtShares;
+            (,, uint192 recorded) = lendVault.tokenConfigs(tokens[t]);
             uint256 summed;
             for (uint256 o = 0; o < owners.length; o++) {
                 uint256 n = lendVault.loanCount(owners[o]);
                 for (uint256 i = 0; i < n; i++) {
                     uint256 id = lendVault.loanAtIndex(owners[o], i);
                     if (poolContains(id, tokens[t])) {
-                        summed += lendVault.loans(id).debtShares;
+                        (uint256 ds) = lendVault.loans(id);
+                        summed += ds;
                     }
                 }
             }
