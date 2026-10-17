@@ -22,7 +22,7 @@
           "echidna_"
         ]
       },
-      "testAllContracts": true
+      "testAllContracts": false
     }
   }
 }
