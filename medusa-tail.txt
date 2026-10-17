@@ -1,0 +1,11 @@
+[1m[32m⇾[0m[0m [1mReading the configuration file at: [1mmedusa.json[0m[0m
+[1m[32m⇾[0m[0m [1mCompiling targets with [1mcrytic-compile[0m[0m
+[1m[32m⇾[0m[0m [1mRunning command:
+crytic-compile . --export-format solc[0m
+[1m[31merror[0m[0m [1mFailed to compile target[31m
+‣ error while executing crytic-compile:
+OUTPUT:
+
+ERROR: exec: "crytic-compile": executable file not found in $PATH
+[0m[0m
+EXIT=6
