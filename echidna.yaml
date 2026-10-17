@@ -1,0 +1,8 @@
+testMode: assertion
+testLimit: 10000
+seqLen: 100
+shrinkLimit: 5000
+corpusDir: echidna-corpus
+sender: ["0x10000", "0x20000", "0x30000"]
+balanceContract: 0
+cryticArgs: ["--compile-force-framework", "foundry"]
