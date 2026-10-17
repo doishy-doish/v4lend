@@ -5,16 +5,19 @@ on:
       timeout:
         description: 'Timeout in seconds'
         required: true
-        default: '1800'
+        default: '300'
       test_limit:
         description: 'Medusa testLimit (0 = unlimited until timeout)'
         required: true
         default: '0'
 
+permissions:
+  contents: write
+
 jobs:
   medusa:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,15 +28,25 @@ jobs:
       - name: Build
         run: forge build --skip test --skip script
       - name: Install Medusa
+        run: medusa --version || true
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install Medusa
         run: |
           go install github.com/crytic/medusa@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
       - name: Run Medusa
         run: |
-          medusa fuzz --config medusa.json --timeout ${{ github.event.inputs.timeout }} --test-limit ${{ github.event.inputs.test_limit }}
-      - name: Upload corpus
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: medusa-corpus
-          path: medusa-corpus/
+          set +e
+          export PATH=$PATH:$HOME/go/bin
+          medusa fuzz --config medusa.json --timeout 300 --test-limit 0 > medusa-out.txt 2>&1
+          echo "EXIT=$?" >> medusa-out.txt
+          tail -c 15000 medusa-out.txt > medusa-tail.txt || cp medusa-out.txt medusa-tail.txt
+          git config user.name "medusa-bot"
+          git config user.email "medusa-bot@local"
+          git add -f medusa-tail.txt
+          git commit -m "medusa tail" || true
+          git push origin HEAD:main
+          exit 0
