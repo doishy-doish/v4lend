@@ -137,6 +137,10 @@ contract CustodyInvariant is BaseTest {
         poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
         v4Oracle.setPoolKey(address(0), address(token1), poolKey);
 
+        // BISECT-1: everything below this line is disabled to isolate the
+        // deploy-time halt (suspect: gas ceiling on the giant constructor).
+        // If deployment succeeds, re-enable in halves.
+        /*
         vm.deal(address(this), 1_000 ether);
         _mintPositionEth(poolKey, TickMath.minUsableTick(poolKey.tickSpacing), TickMath.maxUsableTick(poolKey.tickSpacing), 100e18);
 
@@ -167,6 +171,7 @@ contract CustodyInvariant is BaseTest {
         weth.deposit{value: 20e18}();
         IERC20(address(weth)).approve(address(lendVault), 20e18);
         lendVault.deposit(20e18, address(this));
+        */
     }
 
     function _lendConfig() internal pure returns (RevertHookState.PositionConfig memory) {
