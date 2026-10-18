@@ -1,0 +1,15 @@
+{
+  "team": "Example",
+  "fee": "$2,000 USDC",
+  "turnaround": "72 hours",
+  "target": "ExampleVault and ExampleQueue",
+  "deliverable": "short finding report and patch diffs",
+  "signer": "Andrale Misquitta",
+  "role": "Independent Security Researcher",
+  "subject": "Example vault split worth one check",
+  "followSubject": "Re: Example vault split",
+  "praise": "Your segregated ledgers hold up across the traced paths.",
+  "praiseAdj": "solid work",
+  "followCut": "re-run the reconcile check on the last three settles.",
+  "contactStatus": "example only"
+}

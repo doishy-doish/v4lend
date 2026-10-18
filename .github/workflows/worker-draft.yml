@@ -1,0 +1,70 @@
+# Worker cron: stage outreach skeletons + scores. READ-ONLY plus stage.
+# What it NEVER does: send email, spend money, touch secrets, push to main.
+# Drop this file into the repo that holds the money lane as
+# .github/workflows/worker-draft.yml (operator merges, first cron run proves it).
+name: worker-draft-assembler
+
+on:
+  schedule:
+    - cron: "30 6 * * *" # daily 06:30 UTC, change freely
+  workflow_dispatch: {} # manual run button
+
+permissions:
+  contents: write # to push the staged-drafts branch only
+  pull-requests: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Repo layout expected (create once, worker refuses loudly if missing):
+      #   worker/hooks/<lead>.md      hook file with ## Hook / ## Check sections
+      #   worker/leads/<lead>.json    lead config (team, fee, praise, hookPara fallback...)
+      #   worker/draft-assembler.mjs  copy of scratch/money/worker-draft-assembler.mjs
+      - name: Assemble staged drafts
+        run: |
+          mkdir -p worker/staged
+          for lead in worker/leads/*.json; do
+            name=$(basename "$lead" .json)
+            hook="worker/hooks/${name}.md"
+            out="worker/staged/outreach-${name}.md"
+            if [ ! -f "$hook" ]; then echo "SKIP $name: no $hook"; continue; fi
+            node worker/draft-assembler.mjs "$hook" "$lead" "$out" || echo "REFUSED $name (see log)"
+          done
+          echo "--- staged ---"
+          ls -la worker/staged/ || true
+
+      # Commit staged drafts to a review branch, never to main.
+      - name: Push review branch
+        run: |
+          git config user.name "draft-worker"
+          git config user.email "draft-worker@local"
+          git checkout -B worker/staged-drafts
+          git add worker/staged/ || true
+          git diff --cached --quiet && echo "nothing new" && exit 0
+          git commit -m "worker: staged drafts $(date -u +%F)"
+          git push -f origin worker/staged-drafts
+
+      - name: Open or update review PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner, repo: context.repo.repo,
+              head: `${context.repo.owner}:worker/staged-drafts`, state: 'open',
+            });
+            if (prs.length) { core.info(`PR already open: ${prs[0].html_url}`); return; }
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              head: 'worker/staged-drafts', base: 'main',
+              title: 'Worker: staged outreach drafts (review before any send)',
+              body: 'Rule-based skeletons + tell-scan scores. Human sharpens. NOTHING here sends anything; sending stays behind an explicit operator command in chat.',
+            });
+            core.info(`opened ${pr.html_url}`);
