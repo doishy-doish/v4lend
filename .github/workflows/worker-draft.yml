@@ -53,17 +53,19 @@ jobs:
           git push -f origin worker/staged-drafts
 
       - name: Open or update review PR
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
+            const head = 'worker/staged-drafts';
             const { data: prs } = await github.rest.pulls.list({
               owner: context.repo.owner, repo: context.repo.repo,
-              head: `${context.repo.owner}:worker/staged-drafts`, state: 'open',
+              head: head, state: 'open',
             });
             if (prs.length) { core.info(`PR already open: ${prs[0].html_url}`); return; }
             const { data: pr } = await github.rest.pulls.create({
               owner: context.repo.owner, repo: context.repo.repo,
-              head: 'worker/staged-drafts', base: 'main',
+              head: head, base: 'main',
               title: 'Worker: staged outreach drafts (review before any send)',
               body: 'Rule-based skeletons + tell-scan scores. Human sharpens. NOTHING here sends anything; sending stays behind an explicit operator command in chat.',
             });
