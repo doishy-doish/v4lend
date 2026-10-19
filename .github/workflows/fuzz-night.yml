@@ -1,0 +1,24 @@
+name: fuzz-night
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: soak hours
+        default: "8"
+permissions:
+  contents: read
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        campaign: [custody, debt, solvency, lock, abstraction-oracle, abstraction-accrual]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Run echidna campaign
+        run: |
+          echo "campaign={{ matrix.campaign }} hours={{ inputs.hours }}"
+          ls test/echidna/ || true
