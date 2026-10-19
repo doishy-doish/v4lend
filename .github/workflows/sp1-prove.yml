@@ -35,3 +35,9 @@ jobs:
         run: |
           export PATH="$HOME/.sp1/bin:$PATH"
           cargo run --release --bin core_u64 2>&1 | tail -40
+      - name: groth16 recursion leg
+        if: success()
+        working-directory: /tmp/sp1/examples/fibonacci/script
+        run: |
+          export PATH="$HOME/.sp1/bin:$PATH"
+          cargo run --release --bin groth16_bn254 2>&1 | tail -60
