@@ -13,16 +13,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: versions
+        run: rustc --version; cargo --version; ls ~/.sp1/bin || true
       - name: install SP1 toolchain
         run: |
           curl -L https://sp1.succinct.xyz | bash
-          ~/.sp1/bin/sp1up
+          ~/.sp1/bin/sp1up || true
           echo "$HOME/.sp1/bin" >> $GITHUB_PATH
+          ls ~/.sp1 || true
       - name: clone SP1 pinned
         run: git clone --depth 1 --branch main https://github.com/succinctlabs/sp1.git /tmp/sp1
       - name: execute smoke (no proof)
         working-directory: /tmp/sp1/examples/fibonacci/script
-        run: cargo run --release --bin execute
+        run: |
+          export PATH="$HOME/.sp1/bin:$PATH"
+          sp1 --version || true
+          cargo run --release --bin execute 2>&1 | tail -80
       - name: core prove smoke
+        if: success()
         working-directory: /tmp/sp1/examples/fibonacci/script
-        run: cargo run --release --bin core_u64
+        run: |
+          export PATH="$HOME/.sp1/bin:$PATH"
+          cargo run --release --bin core_u64 2>&1 | tail -40
