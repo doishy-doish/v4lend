@@ -39,3 +39,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Pending harness marker
         run: echo "campaign={{ matrix.campaign }} PENDING-HARNESS no test file yet"
+
+  collect:
+    needs: [echidna-custody, pending-harness]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Collect results
+        run: echo "collect after all campaigns, none blocked by siblings"
