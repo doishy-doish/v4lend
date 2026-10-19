@@ -36,8 +36,16 @@ jobs:
           export PATH="$HOME/.sp1/bin:$PATH"
           cargo run --release --bin core_u64 2>&1 | tail -40
       - name: groth16 recursion leg
+        timeout-minutes: 60
         if: success()
         working-directory: /tmp/sp1/examples/fibonacci/script
         run: |
           export PATH="$HOME/.sp1/bin:$PATH"
           cargo run --release --bin groth16_bn254 2>&1 | tail -60
+      - name: plonk recursion leg
+        if: success()
+        timeout-minutes: 90
+        working-directory: /tmp/sp1/examples/fibonacci/script
+        run: |
+          export PATH="$HOME/.sp1/bin:$PATH"
+          cargo run --release --bin plonk_bn254 2>&1 | tail -60
