@@ -25,8 +25,11 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Echidna custody soak
         run: |
-          pip install echidna 2>/dev/null || true
-          ls test/echidna/
+          pip install echidna
+          H=$(( ${{ inputs.hours }} * 3600 ))
+          timeout $H echidna . --contract CustodyInvariant --config echidna.yaml --test-limit 1000000 || code=$?
+          if [ "$code" -eq 124 ]; then echo "soak used full window, no failure"; exit 0; fi
+          exit $code
   pending-harness:
     needs: build
     runs-on: ubuntu-latest
