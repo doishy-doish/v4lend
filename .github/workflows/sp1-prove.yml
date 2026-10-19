@@ -1,0 +1,28 @@
+name: sp1-prove
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: fibonacci n (small for CI smoke)
+        default: '100'
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: install SP1 toolchain
+        run: |
+          curl -L https://sp1.succinct.xyz | bash
+          ~/.sp1/bin/sp1up
+          echo "$HOME/.sp1/bin" >> $GITHUB_PATH
+      - name: clone SP1 pinned
+        run: git clone --depth 1 --branch main https://github.com/succinctlabs/sp1.git /tmp/sp1
+      - name: execute smoke (no proof)
+        working-directory: /tmp/sp1/examples/fibonacci/script
+        run: cargo run --release --bin execute
+      - name: core prove smoke
+        working-directory: /tmp/sp1/examples/fibonacci/script
+        run: cargo run --release --bin core_u64
