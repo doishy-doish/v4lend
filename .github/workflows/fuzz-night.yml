@@ -23,13 +23,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install echidna binary
+        run: |
+          curl -sL -o echidna.tar.gz https://github.com/crytic/echidna/releases/download/v2.4.1/echidna-2.4.1-x86_64-linux.tar.gz
+          tar xzf echidna.tar.gz echidna
+          chmod +x echidna
+          ./echidna --version
       - name: Echidna custody soak
         run: |
-          pip install echidna
-          H=$(( ${{ inputs.hours }} * 3600 ))
-          timeout $H echidna . --contract CustodyInvariant --config echidna.yaml --test-limit 1000000 || code=$?
-          if [ "$code" -eq 124 ]; then echo "soak used full window, no failure"; exit 0; fi
-          exit $code
+          HOURS="${{ inputs.hours }}"
+          if [ -z "$HOURS" ]; then HOURS=1; fi
+          H=$(( HOURS * 3600 ))
+          ./echidna . --contract CustodyInvariant --config echidna.yaml --test-limit 1000000 &
+          EPID=$!
+          sleep $H
+          if kill -0 $EPID 2>/dev/null; then echo "soak used full window, no failure"; kill $EPID; exit 0; fi
+          wait $EPID
+          code=$?
+          if [ "$code" -eq 0 ]; then echo "echidna completed clean inside window"; exit 0; fi
+          echo "echidna exited nonzero ($code), possible property failure"; exit $code
   pending-harness:
     needs: build
     runs-on: ubuntu-latest
@@ -41,8 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Pending harness marker
-        run: echo "campaign={{ matrix.campaign }} PENDING-HARNESS no test file yet"
-
+        run: echo "campaign=${{ matrix.campaign }} PENDING-HARNESS no test file yet"
   collect:
     needs: [echidna-custody, pending-harness]
     if: always()
