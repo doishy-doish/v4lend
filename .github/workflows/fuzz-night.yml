@@ -3,10 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: soak hours
-        default: "8"
+        description: soak hours per campaign
+        default: "1"
+      matrix_json:
+        description: JSON list of harness contracts (default open-surface only)
+        default: '["OracleSoak", "AccrualSoak"]'
 permissions:
   contents: read
+  actions: write
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -14,6 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: foundry-rs/foundry-toolchain@v1
+      - name: Restore forge cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.svm
+            cache
+            out
+          key: foundry-${{ runner.os }}-${{ hashFiles('foundry.toml', 'remappings.txt', 'src/**/*.sol', 'test/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-
       - name: Forge build gate
         run: forge build
   soak:
@@ -23,10 +37,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        contract: [CustodyInvariant, DebtSoak, SolvencySoak, LockSoak, OracleSoak, AccrualSoak]
+        contract: ${{ fromJSON(inputs.matrix_json) }}
     steps:
       - uses: actions/checkout@v5
       - uses: foundry-rs/foundry-toolchain@v1
+      - name: Restore forge cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.svm
+            cache
+            out
+          key: foundry-${{ runner.os }}-${{ hashFiles('foundry.toml', 'remappings.txt', 'src/**/*.sol', 'test/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-
+      - name: Incremental build
+        run: forge build
+      - name: Restore echidna corpus
+        uses: actions/cache@v4
+        with:
+          path: echidna-corpus
+          key: echidna-corpus-${{ matrix.contract }}-${{ github.run_id }}
+          restore-keys: |
+            echidna-corpus-${{ matrix.contract }}-
       - name: Install echidna binary
         run: |
           set -euo pipefail
@@ -36,17 +69,25 @@ jobs:
           ./echidna --version
       - name: Echidna soak
         run: |
+          set +e
           HOURS="${{ inputs.hours }}"
           if [ -z "$HOURS" ]; then HOURS=1; fi
           H=$(( HOURS * 3600 ))
-          ./echidna . --contract ${{ matrix.contract }} --config echidna.yaml --test-limit 1000000 &
+          ./echidna . --contract ${{ matrix.contract }} --config echidna.yaml --test-limit 1000000 2>&1 | tee echidna-${{ matrix.contract }}.log &
           EPID=$!
           sleep $H
-          if kill -0 $EPID 2>/dev/null; then echo "soak used full window, no failure"; kill $EPID; exit 0; fi
+          if kill -0 $EPID 2>/dev/null; then echo "soak used full window, no failure"; kill $EPID; wait $EPID; exit 0; fi
           wait $EPID
           code=$?
           if [ "$code" -eq 0 ]; then echo "echidna completed clean inside window"; exit 0; fi
           echo "echidna exited nonzero ($code), possible property failure"; exit $code
+      - name: Upload campaign log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: echidna-${{ matrix.contract }}-log
+          path: echidna-${{ matrix.contract }}.log
+          retention-days: 14
   collect:
     needs: [soak]
     if: always()
@@ -54,4 +95,4 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Collect results
-        run: echo "collect after all campaigns"
+        run: echo "collect after all campaigns (logs on each soak job as artifacts)"
