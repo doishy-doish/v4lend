@@ -1,0 +1,46 @@
+name: upgrade-watch
+on:
+  schedule:
+    - cron: "7 6 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback:
+        description: ethereum lookback blocks
+        default: "8000"
+      lookback_op:
+        description: optimism lookback blocks
+        default: "45000"
+permissions:
+  contents: write
+  issues: write
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run upgrade monitor
+        id: mon
+        run: |
+          set +e
+          python3 scripts/upgrade-watch/monitor_upgrades.py --lookback "${{ inputs.lookback || '8000' }}" --lookback-op "${{ inputs.lookback_op || '45000' }}" --state scripts/upgrade-watch/state.json --out findings
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Persist state
+        run: |
+          if [ -n "$(git status --porcelain scripts/upgrade-watch/state.json)" ]; then
+            git config user.name "upgrade-watch"
+            git config user.email "upgrade-watch@users.noreply.github.com"
+            git add scripts/upgrade-watch/state.json
+            git commit -m "upgrade-watch: refresh baseline state"
+            git push
+          else
+            echo "state unchanged"
+          fi
+      - name: Raise issue on new upgrade
+        if: steps.mon.outputs.code == '2'
+        run: |
+          for f in findings/upgrade-*.json; do
+            [ -e "$f" ] || break
+            gh issue create --title "Proxy upgrade detected: $(basename $f)" --body "$(cat $f)"
+          done
