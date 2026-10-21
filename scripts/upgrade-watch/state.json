@@ -1,1 +1,27 @@
-{}
+{
+  "0xbeb5fc579115071764c7423a4f12edde41f106ed@ethereum": {
+    "impl": null,
+    "block": 26239536,
+    "baseline": "cold"
+  },
+  "0x99c9fc46f92e8a1c0dec1b1747d010903e884be1@ethereum": {
+    "impl": null,
+    "block": 26239536,
+    "baseline": "cold"
+  },
+  "0x229047fed2591dbec1ef1118d64f7af3db9eb290@ethereum": {
+    "impl": null,
+    "block": 26239536,
+    "baseline": "cold"
+  },
+  "0x794a61358d6845594f94dc1db02a252b5b4814ad@optimism": {
+    "impl": null,
+    "block": 158484817,
+    "baseline": "cold"
+  },
+  "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2@ethereum": {
+    "impl": null,
+    "block": 26239536,
+    "baseline": "cold"
+  }
+}
