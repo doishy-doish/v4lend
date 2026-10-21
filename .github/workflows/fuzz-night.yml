@@ -19,7 +19,7 @@ jobs:
   echidna-custody:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 660
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
@@ -36,7 +36,7 @@ jobs:
         run: |
           HOURS="${{ inputs.hours }}"
           if [ -z "$HOURS" ]; then HOURS=1; fi
-          H=$(( HOURS * 360 ))
+          H=$(( HOURS * 3600 ))
           ./echidna . --contract CustodyInvariant --config echidna.yaml --test-limit 1000000 &
           EPID=$!
           sleep $H
