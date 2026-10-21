@@ -16,10 +16,14 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Forge build gate
         run: forge build
-  echidna-custody:
+  soak:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 660
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [CustodyInvariant, DebtSoak, SolvencySoak, LockSoak, OracleSoak, AccrualSoak]
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
@@ -32,12 +36,12 @@ jobs:
           tar xzf echidna.tar.gz echidna
           chmod +x echidna
           ./echidna --version
-      - name: Echidna custody soak
+      - name: Echidna soak
         run: |
           HOURS="${{ inputs.hours }}"
           if [ -z "$HOURS" ]; then HOURS=1; fi
           H=$(( HOURS * 3600 ))
-          ./echidna . --contract CustodyInvariant --config echidna.yaml --test-limit 1000000 &
+          ./echidna . --contract ${{ matrix.contract }} --config echidna.yaml --test-limit 1000000 &
           EPID=$!
           sleep $H
           if kill -0 $EPID 2>/dev/null; then echo "soak used full window, no failure"; kill $EPID; exit 0; fi
@@ -45,3 +49,11 @@ jobs:
           code=$?
           if [ "$code" -eq 0 ]; then echo "echidna completed clean inside window"; exit 0; fi
           echo "echidna exited nonzero ($code), possible property failure"; exit $code
+  collect:
+    needs: [soak]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Collect results
+        run: echo "collect after all campaigns"
