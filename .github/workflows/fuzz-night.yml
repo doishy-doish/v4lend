@@ -9,23 +9,23 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Forge build gate
         run: forge build
   soak:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 660
     strategy:
       fail-fast: false
       matrix:
         contract: [CustodyInvariant, DebtSoak, SolvencySoak, LockSoak, OracleSoak, AccrualSoak]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Install echidna binary
         run: |
@@ -50,7 +50,7 @@ jobs:
   collect:
     needs: [soak]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Collect results
