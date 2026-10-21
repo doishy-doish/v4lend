@@ -19,4 +19,7 @@ jobs:
       - name: single-test red repro
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cd gh/compiler && cargo test -p hy-check --test field_method_name_clash -- --nocapture > /tmp/t.log 2>&1; code=$?; tail -40 /tmp/t.log; echo RED_CODE=$code; exit $code
+          which cargo; cargo --version; ls gh/compiler/crates/hy-check/tests/ | head
+          cd gh/compiler && cargo test -p hy-check --test field_method_name_clash -- --nocapture > /tmp/t.log 2>&1; code=$?; tail -30 /tmp/t.log; echo RED_CODE=$code
+          grep -E "^error" /tmp/t.log | head -10 | sed "s/^/::error::/" || true
+          exit $code
