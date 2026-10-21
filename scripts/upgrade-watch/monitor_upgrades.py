@@ -29,7 +29,8 @@ UPGRADED_TOPIC = "0xbc7cd75a20ee27fd9adebab32041f755214d8526a507d8a33950f42aa1c7
 
 CHAIN_RPCS = {
     "ethereum": ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com",
-                 "https://ethereum.publicnode.com", "https://rpc.ankr.com/eth"],
+                 "https://cloudflare-eth.com", "https://rpc.builder0x69.io",
+                 "https://ethereum.publicnode.com"],
     "optimism": ["https://mainnet.optimism.io", "https://optimism.llamarpc.com",
                  "https://optimism.publicnode.com"],
 }
@@ -70,15 +71,15 @@ def rpc(url, method, params):
 
 def rpc_any(chain, first, method, params):
     urls = [first] + [u for u in CHAIN_RPCS.get(chain, []) if u != first]
-    last = None
+    errs = []
     for u in urls:
         try:
             out = rpc(u, method, params)
             time.sleep(1)
             return out
         except Exception as e:
-            last = e
-    raise RuntimeError("all endpoints failed for %s %s: %r" % (chain, method, last))
+            errs.append("%s: %s" % (u, str(e)[:150]))
+    raise RuntimeError("all endpoints failed: " + " | ".join(errs))
 
 
 def main():
