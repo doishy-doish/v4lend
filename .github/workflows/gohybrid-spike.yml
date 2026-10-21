@@ -10,36 +10,13 @@ jobs:
       - uses: actions/checkout@v5
         with: {repository: limitlessprojects/Go-Hybrid, ref: main, path: gh}
       - uses: actions/setup-go@v5
-        with: {go-version: 1.26.9, cache-dependency-path: gh/go.sum}
+        with: {go-version: 1.26.9}
       - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.99.0
       - uses: Swatinem/rust-cache@v2
         with: {workspaces: gh/compiler -> target}
-      - name: write reconstructed clash test
-        run: |
-          cat > gh/compiler/crates/hy-check/tests/field_method_name_clash.rs <<'EOF'
-          use hy_check::check_file;
-          use hy_syntax::parse_file;
-          fn codes(src: &str) -> Vec<String> {
-              let ast = parse_file("test.hy", src).expect("parses");
-              check_file(&ast).diagnostics.into_iter().map(|d| d.code).collect()
-          }
-          #[test]
-          fn value_receiver_clash_rejects_e1002() {
-              let cs = codes("struct counter {\n    n int\n}\nfn (c counter) n() int {\n    return 1\n}\nfn main() {\n    c := counter{n: 2}\n}\n");
-              assert!(cs.iter().any(|c| c == "HYB-E1002"), "expected HYB-E1002, got {cs:?}");
-          }
-          #[test]
-          fn pointer_receiver_clash_rejects_e1002() {
-              let cs = codes("struct counter {\n    n int\n}\nfn (c *counter) n() int {\n    return 1\n}\nfn main() {\n    c := counter{n: 2}\n}\n");
-              assert!(cs.iter().any(|c| c == "HYB-E1002"), "expected HYB-E1002, got {cs:?}");
-          }
-          #[test]
-          fn distinct_names_pass() {
-              let cs = codes("struct counter {\n    n int\n}\nfn (c counter) get() int {\n    return 1\n}\nfn main() {\n    c := counter{n: 2}\n}\n");
-              assert!(cs.is_empty(), "expected 0 diagnostics, got {cs:?}");
-          }
-          EOF
+      - name: write clash test (base64, no heredoc)
+        run: python3 -c "import base64;open('gh/compiler/crates/hy-check/tests/field_method_name_clash.rs','wb').write(base64.b64decode('dXNlIGh5X2NoZWNrOjpjaGVja19maWxlOwp1c2UgaHlfc3ludGF4OjpwYXJzZV9maWxlOwpmbiBjb2RlcyhzcmM6ICZzdHIpIC0+IFZlYzxTdHJpbmc+IHsKICAgIGxldCBhc3QgPSBwYXJzZV9maWxlKCJ0ZXN0Lmh5Iiwgc3JjKS5leHBlY3QoInBhcnNlcyIpOwogICAgY2hlY2tfZmlsZSgmYXN0KS5kaWFnbm9zdGljcy5pbnRvX2l0ZXIoKS5tYXAofGR8IGQuY29kZSkuY29sbGVjdCgpCn0KI1t0ZXN0XQpmbiB2YWx1ZV9yZWNlaXZlcl9jbGFzaF9yZWplY3RzX2UxMDAyKCkgewogICAgbGV0IGNzID0gY29kZXMoInN0cnVjdCBjb3VudGVyIHtcbiAgICBuIGludFxufVxuZm4gKGMgY291bnRlcikgbigpIGludCB7XG4gICAgcmV0dXJuIDFcbn1cbmZuIG1haW4oKSB7XG4gICAgYyA6PSBjb3VudGVye246IDJ9XG59XG4iKTsKICAgIGFzc2VydCEoY3MuaXRlcigpLmFueSh8Y3wgYyA9PSAiSFlCLUUxMDAyIiksICJleHBlY3RlZCBIWUItRTEwMDIsIGdvdCB7Oj99IiwgY3MpOwp9CiNbdGVzdF0KZm4gcG9pbnRlcl9yZWNlaXZlcl9jbGFzaF9yZWplY3RzX2UxMDAyKCkgewogICAgbGV0IGNzID0gY29kZXMoInN0cnVjdCBjb3VudGVyIHtcbiAgICBuIGludFxufVxuZm4gKGMgKmNvdW50ZXIpIG4oKSBpbnQge1xuICAgIHJldHVybiAxXG59XG5mbiBtYWluKCkge1xuICAgIGMgOj0gY291bnRlcntuOiAyfVxufVxuIik7CiAgICBhc3NlcnQhKGNzLml0ZXIoKS5hbnkofGN8IGMgPT0gIkhZQi1FMTAwMiIpLCAiZXhwZWN0ZWQgSFlCLUUxMDAyLCBnb3Qgezo/fSIsIGNzKTsKfQojW3Rlc3RdCmZuIGRpc3RpbmN0X25hbWVzX3Bhc3MoKSB7CiAgICBsZXQgY3MgPSBjb2Rlcygic3RydWN0IGNvdW50ZXIge1xuICAgIG4gaW50XG59XG5mbiAoYyBjb3VudGVyKSBnZXQoKSBpbnQge1xuICAgIHJldHVybiAxXG59XG5mbiBtYWluKCkge1xuICAgIGMgOj0gY291bnRlcntuOiAyfVxufVxuIik7CiAgICBhc3NlcnQhKGNzLmlzX2VtcHR5KCksICJleHBlY3RlZCAwIGRpYWdub3N0aWNzLCBnb3Qgezo/fSIsIGNzKTsKfQo='))"
       - name: single-test red repro
         run: |
-          export PATH="$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
-          cd gh/compiler && cargo test -p hy-check --test field_method_name_clash -- --nocapture
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cd gh/compiler && cargo test -p hy-check --test field_method_name_clash -- --nocapture > /tmp/t.log 2>&1; code=$?; tail -40 /tmp/t.log; echo RED_CODE=$code; exit $code
