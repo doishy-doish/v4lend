@@ -28,4 +28,4 @@ jobs:
         if: always()
         env: {GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
         run: |
-          MSG=$(tail -c 2500 /tmp/t.log 2>/dev/null || echo no-log-file); printf "cargo tail:\n%s\n" "$MSG" | gh api repos/doishy-doish/v4lend/commits/${{ github.sha }}/comments -f body=- || true
+          MSG=$(tail -c 2500 /tmp/t.log 2>/dev/null || echo no-log-file); printf "cargo tail:\n%s\n" "$MSG" | gh api repos/doishy-doish/v4lend/commits/${{ github.sha }}/comments -F body=@- || true
