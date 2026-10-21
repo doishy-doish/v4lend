@@ -53,7 +53,8 @@ def rpc(url, method, params):
     last = None
     for attempt in (1, 2):
         body = json.dumps({"jsonrpc": "2.0", "id": attempt, "method": method, "params": params}).encode()
-        req = urllib.request.Request(url, data=body, headers={"content-type": "application/json"})
+        req = urllib.request.Request(url, data=body, headers={"content-type": "application/json",
+                                                            "user-agent": "curl/8.5.0"})
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 out = json.load(r)
