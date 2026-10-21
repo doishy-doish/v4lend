@@ -30,9 +30,7 @@ jobs:
       - name: Install echidna binary
         run: |
           set -euo pipefail
-          TAG=$(curl -s https://api.github.com/repos/crytic/echidna/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-          echo "echidna tag $TAG"
-          curl -sL -o echidna.tar.gz "https://github.com/crytic/echidna/releases/download/$TAG/echidna-$TAG-x86_64-linux.tar.gz"
+          curl -sL -o echidna.tar.gz "https://github.com/crytic/echidna/releases/download/v2.3.3/echidna-2.3.3-x86_64-linux.tar.gz"
           tar xzf echidna.tar.gz echidna
           chmod +x echidna
           ./echidna --version
