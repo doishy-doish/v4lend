@@ -33,6 +33,10 @@ CHAIN_RPCS = {
                  "https://ethereum.publicnode.com"],
     "optimism": ["https://mainnet.optimism.io", "https://optimism.llamarpc.com",
                  "https://optimism.publicnode.com"],
+    "arbitrum": ["https://arbitrum.publicnode.com", "https://arb1.arbitrum.io/rpc",
+                 "https://arbitrum.llamarpc.com"],
+    "base": ["https://base.publicnode.com", "https://mainnet.base.org",
+             "https://base.llamarpc.com"],
 }
 
 WATCHED = [
@@ -46,6 +50,10 @@ WATCHED = [
      "0x794a61358D6845594F94dc1DB02A252b5b4814aD"),
     ("AaveV3Pool-ETH", "ethereum", "https://ethereum-rpc.publicnode.com",
      "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"),
+    ("AaveV3Pool-ARB", "arbitrum", "https://arbitrum.publicnode.com",
+     "0x794a61358D6845594F94dc1DB02A252b5b4814aD"),
+    ("AaveV3Pool-BASE", "base", "https://base.publicnode.com",
+     "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"),
 ]
 
 
@@ -88,6 +96,8 @@ def main():
     ap.add_argument("--lookback", type=int, default=1000)
     ap.add_argument("--lookback-op", type=int, default=None,
                     help="lookback for optimism (2s blocks); defaults to --lookback")
+    ap.add_argument("--lookback-alt", type=int, default=350000,
+                    help="lookback for fast chains (arbitrum/base); queried in 4000-block chunks")
     ap.add_argument("--state", default="scratch/upgrade-state.json")
     ap.add_argument("--out", default="findings")
     args = ap.parse_args()
@@ -114,12 +124,22 @@ def main():
     for name, chain, rpc_url, proxy in WATCHED:
         rk = proxy.lower() + "@" + chain
         latest_c = chains[chain]["latest"]
-        lb = args.lookback_op if (chain == "optimism" and args.lookback_op) else args.lookback
-        frm = hex(max(0, latest_c - lb))
-        logs = rpc_any(chain, rpc_url, "eth_getLogs", [{
-            "fromBlock": frm, "toBlock": "latest",
-            "address": proxy, "topics": [UPGRADED_TOPIC],
-        }])
+        if chain == "optimism":
+            lb = args.lookback_op if args.lookback_op else args.lookback
+        elif chain in ("arbitrum", "base"):
+            lb = args.lookback_alt
+        else:
+            lb = args.lookback
+        start = max(0, latest_c - lb)
+        logs = []
+        b = start
+        while b <= latest_c:
+            e = min(b + 3999, latest_c)
+            logs += rpc_any(chain, rpc_url, "eth_getLogs", [{
+                "fromBlock": hex(b), "toBlock": hex(e),
+                "address": proxy, "topics": [UPGRADED_TOPIC],
+            }])
+            b = e + 1
         for lg in logs:
             new_impl = "0x" + lg["topics"][1][-40:]
             blk = int(lg["blockNumber"], 16)
