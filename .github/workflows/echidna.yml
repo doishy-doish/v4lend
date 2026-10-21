@@ -13,10 +13,10 @@ on:
 
 jobs:
   echidna:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
