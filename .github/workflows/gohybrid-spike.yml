@@ -21,5 +21,5 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           which cargo; cargo --version; ls gh/compiler/crates/hy-check/tests/ | head
           cd gh/compiler && cargo test -p hy-check --test field_method_name_clash -- --nocapture > /tmp/t.log 2>&1; code=$?; tail -30 /tmp/t.log; echo RED_CODE=$code
-          grep -aE "^(error|warning|test result|failures|    Running|   Compiling hy|    Finished|thread .* panicked)" /tmp/t.log | head -20 | sed "s/^/::notice::/" || true
+          CLEAN=$(sed "s/\x1b\[[0-9;]*m//g" /tmp/t.log); echo "$CLEAN" | wc -l | sed "s/^/::notice::LOGLINES=/"; echo "$CLEAN" | grep -aiE "error|test result|FAILED|passed|panicked|compiling|finished|cannot|failed" | head -30 | sed "s/^/::notice::/" || true
           exit $code
