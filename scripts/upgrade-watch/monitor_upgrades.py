@@ -22,9 +22,17 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.request
 
 UPGRADED_TOPIC = "0xbc7cd75a20ee27fd9adebab32041f755214d8526a507d8a33950f42aa1c70d1b"
+
+CHAIN_RPCS = {
+    "ethereum": ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com",
+                 "https://ethereum.publicnode.com", "https://rpc.ankr.com/eth"],
+    "optimism": ["https://mainnet.optimism.io", "https://optimism.llamarpc.com",
+                 "https://optimism.publicnode.com"],
+}
 
 WATCHED = [
     ("OptimismPortalProxy", "ethereum", "https://ethereum-rpc.publicnode.com",
@@ -41,13 +49,36 @@ WATCHED = [
 
 
 def rpc(url, method, params):
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
-    req = urllib.request.Request(url, data=body, headers={"content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        out = json.load(r)
-    if out.get("error"):
-        raise RuntimeError(out["error"])
-    return out["result"]
+    last = None
+    for attempt in (1, 2):
+        body = json.dumps({"jsonrpc": "2.0", "id": attempt, "method": method, "params": params}).encode()
+        req = urllib.request.Request(url, data=body, headers={"content-type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                out = json.load(r)
+        except Exception as e:
+            last = e
+            time.sleep(5)
+            continue
+        if out.get("error"):
+            last = RuntimeError(out["error"])
+            time.sleep(5)
+            continue
+        return out["result"]
+    raise RuntimeError("rpc failed %s %s: %r" % (url, method, last))
+
+
+def rpc_any(chain, first, method, params):
+    urls = [first] + [u for u in CHAIN_RPCS.get(chain, []) if u != first]
+    last = None
+    for u in urls:
+        try:
+            out = rpc(u, method, params)
+            time.sleep(1)
+            return out
+        except Exception as e:
+            last = e
+    raise RuntimeError("all endpoints failed for %s %s: %r" % (chain, method, last))
 
 
 def main():
@@ -63,7 +94,8 @@ def main():
     for name, chain, rpc, proxy in WATCHED:
         chains.setdefault(chain, {"rpc": rpc, "latest": None})
     for chain, info in chains.items():
-        info["latest"] = int(rpc(info["rpc"], "eth_blockNumber", []), 16)
+        first = next(r for n, c, r, p in WATCHED if c == chain)
+        info["latest"] = int(rpc_any(chain, first, "eth_blockNumber", []), 16)
     latest = max(i["latest"] for i in chains.values())
     try:
         with open(args.state) as f:
@@ -82,7 +114,7 @@ def main():
         latest_c = chains[chain]["latest"]
         lb = args.lookback_op if (chain == "optimism" and args.lookback_op) else args.lookback
         frm = hex(max(0, latest_c - lb))
-        logs = rpc(rpc_url, "eth_getLogs", [{
+        logs = rpc_any(chain, rpc_url, "eth_getLogs", [{
             "fromBlock": frm, "toBlock": "latest",
             "address": proxy, "topics": [UPGRADED_TOPIC],
         }])
@@ -92,8 +124,8 @@ def main():
             prev = state.get(rk)
             if prev and prev.get("impl") and prev["impl"].lower() == new_impl.lower():
                 continue
-            old_code = rpc(rpc_url, "eth_getCode", [prev["impl"], hex(blk - 1)]) if prev and prev.get("impl") else "0x"
-            new_code = rpc(rpc_url, "eth_getCode", [new_impl, "latest"])
+            old_code = rpc_any(chain, rpc_url, "eth_getCode", [prev["impl"], hex(blk - 1)]) if prev and prev.get("impl") else "0x"
+            new_code = rpc_any(chain, rpc_url, "eth_getCode", [new_impl, "latest"])
             hit = {"protocol": name, "chain": chain, "proxy": proxy, "block": blk,
                    "tx": lg["transactionHash"], "oldImpl": prev.get("impl") if prev else None,
                    "newImpl": new_impl, "oldLen": len(old_code), "newLen": len(new_code),

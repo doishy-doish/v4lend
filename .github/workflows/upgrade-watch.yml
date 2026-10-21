@@ -25,6 +25,7 @@ jobs:
           set +e
           python3 scripts/upgrade-watch/monitor_upgrades.py --lookback "${{ inputs.lookback || '8000' }}" --lookback-op "${{ inputs.lookback_op || '45000' }}" --state scripts/upgrade-watch/state.json --out findings
           echo "code=$?" >> "$GITHUB_OUTPUT"
+          if [ "$code" = "1" ]; then echo "monitor errored"; exit 1; fi
           exit 0
       - name: Persist state
         run: |
