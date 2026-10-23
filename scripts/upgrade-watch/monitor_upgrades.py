@@ -59,12 +59,12 @@ WATCHED = [
 
 def rpc(url, method, params):
     last = None
-    for attempt in (1, 2):
+    for attempt in (1, 2, 3, 4):
         body = json.dumps({"jsonrpc": "2.0", "id": attempt, "method": method, "params": params}).encode()
         req = urllib.request.Request(url, data=body, headers={"content-type": "application/json",
                                                             "user-agent": "curl/8.5.0"})
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=45) as r:
                 out = json.load(r)
         except Exception as e:
             last = e
@@ -96,7 +96,7 @@ def main():
     ap.add_argument("--lookback", type=int, default=1000)
     ap.add_argument("--lookback-op", type=int, default=None,
                     help="lookback for optimism (2s blocks); defaults to --lookback")
-    ap.add_argument("--lookback-alt", type=int, default=350000,
+    ap.add_argument("--lookback-alt", type=int, default=12000,
                     help="lookback for fast chains (arbitrum/base); queried in 4000-block chunks")
     ap.add_argument("--state", default="scratch/upgrade-state.json")
     ap.add_argument("--out", default="findings")
