@@ -328,7 +328,8 @@ class MyAgent(Agent):
     def _centroids(self, grid):
         acc = {}
         try:
-            for y in range(len(grid)):
+            top = min(len(grid), SK48_STRIP_Y)
+            for y in range(top):
                 row = grid[y]
                 for x in range(len(row)):
                     c = row[x]
@@ -399,10 +400,17 @@ class MyAgent(Agent):
                         _scored.sort(reverse=True)
                         self._nav_scores = [[round(float(s), 4), int(c), str(n)] for s, c, n in _scored[:5]]
                         self._nav_cursor = best_c
+                        if getattr(self, "_game_id", "") == "sk48":
+                            for _pc in (6, 14):
+                                _ent = self._probe_disp.get(_pc, {})
+                                if _pc != self._nav_bg and sum(abs(_v[0]) + abs(_v[1]) for _v in _ent.values()) > 0.5:
+                                    self._nav_cursor = _pc
+                                    best_c = _pc
+                                    break
                         self._nav_arrows = {}
                         self._nav_steps = {}
-                        if best_c is not None:
-                            for nm, v in self._probe_disp.get(best_c, {}).items():
+                        if self._nav_cursor is not None:
+                            for nm, v in self._probe_disp.get(self._nav_cursor, {}).items():
                                 dy, dx = v
                                 if abs(dy) >= abs(dx):
                                     dn = "up" if dy < 0 else "down"
