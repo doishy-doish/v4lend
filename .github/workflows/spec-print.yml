@@ -1,0 +1,15 @@
+name: spec-print
+on:
+  workflow_dispatch: {}
+  push:
+    paths: [.github/workflows/spec-print.yml]
+jobs:
+  spec:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo CPU_COUNT=$(nproc)
+          grep -E 'MemTotal|MemAvailable' /proc/meminfo
+          free -h
+          df -h / | tail -1
+          lscpu | head -8
