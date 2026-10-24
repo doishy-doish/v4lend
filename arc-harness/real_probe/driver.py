@@ -3,6 +3,7 @@ import importlib.util
 import json
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +27,7 @@ spec.loader.exec_module(mod)
 
 p = argparse.ArgumentParser()
 p.add_argument("--game", default="ls20")
-p.add_argument("--max-steps", type=int, default=30)
+p.add_argument("--max-steps", type=int, default=200)
 args = p.parse_args()
 arc = arc_agi.Arcade(operation_mode=OperationMode.NORMAL)
 env = arc.make(args.game)
@@ -39,7 +40,7 @@ t0 = time.time()
 agent.main()
 dt = time.time() - t0
 final = agent.frames[-1]
-out = {"game": args.game, "state": str(final.state), "levels": final.levels_completed, "actions": agent.action_counter, "wall_s": round(dt, 1)}
+out = {"game": args.game, "state": str(final.state), "levels": final.levels_completed, "actions": agent.action_counter, "wall_s": round(dt, 1), "frame_keys": agent._frame_keys, "states": dict(Counter(agent._states_seen))}
 print("PROBE_RESULT " + json.dumps(out))
 with open("probe-results.json", "w") as f:
     json.dump(out, f)
