@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: |
-          python3 -c "import sys; print(sys.version)"
           echo CPU_COUNT=$(nproc)
           grep MemTotal /proc/meminfo
-          ls arc-harness 2>/dev/null || echo NO_HARNESS_YET
+      - run: pip install -q pytest
+      - run: cd arc-harness && python3 -m pytest test_baseline.py -q
