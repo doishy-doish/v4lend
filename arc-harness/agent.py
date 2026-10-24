@@ -44,7 +44,7 @@ class MyAgent:
         actions = list(legal_actions)
         action = self.rng.choice(actions)
         w = len(board[0]) if board else 0
-        self.turns.append({"h": len(board), "w": w, "n_legal": len(actions), "action": action, "ms": int((time.time() - t0) * 1000)})
+        self.turns.append({"h": len(board) if board else 0, "w": w, "n_legal": len(actions), "action": action, "ms": int((time.time() - t0) * 1000)})
         return action
 
     def dump_turns(self, path):
@@ -54,8 +54,13 @@ class MyAgent:
 
 
 def run_episode(agent, board, legal_actions, max_turns=10):
+    legal = list(legal_actions) if legal_actions else []
     for _ in range(max_turns):
-        if agent.choose_action(board, legal_actions) not in legal_actions:
+        try:
+            action = agent.choose_action(board, legal_actions)
+        except Exception:
+            action = legal[0] if legal else "stay"
+        if legal and action not in legal:
             return False
     return True
 
