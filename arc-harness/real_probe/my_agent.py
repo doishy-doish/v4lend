@@ -211,6 +211,66 @@ def _sk_strip_order(grid):
     return [c for c in seq if c in SK48_BLOCK_COLORS]
 
 
+def _route_step(grid, cy, cx, ty, tx, arrows):
+    # Dijkstra on 16x16 downsampled cost map. Returns a direction string present
+    # in arrows, or None. Cost: 4-cells 1, 3-cells 8, else 2.
+    try:
+        gh = len(grid)
+        gw = len(grid[0]) if gh else 0
+        if not gh or not gw:
+            return None
+        from collections import Counter as _CC
+
+        def cell16(_gy, _gx):
+            _cc = _CC()
+            for _yy in range(_gy * gh // 16, (_gy + 1) * gh // 16):
+                for _xx in range(_gx * gw // 16, (_gx + 1) * gw // 16):
+                    _cc[grid[_yy][_xx]] += 1
+            return _cc.most_common(1)[0][0]
+
+        _cost = [[1] * 16 for _ in range(16)]
+        for _my in range(16):
+            for _mx in range(16):
+                _v = cell16(_my, _mx)
+                _cost[_my][_mx] = 1 if _v == 4 else (8 if _v == 3 else 2)
+        _sy = min(15, max(0, int(round(cy)) * 16 // gh))
+        _sx = min(15, max(0, int(round(cx)) * 16 // gw))
+        _dy = min(15, max(0, int(round(ty)) * 16 // gh))
+        _dx = min(15, max(0, int(round(tx)) * 16 // gw))
+        import heapq as _hq
+        _dist = {( _sy, _sx): 0}
+        _prev = {}
+        _pq = [(0, _sy, _sx)]
+        _dirs = ((-1, 0, "up"), (1, 0, "down"), (0, -1, "left"), (0, 1, "right"))
+        while _pq:
+            _d, _y, _x = _hq.heappop(_pq)
+            if _d != _dist.get((_y, _x), None):
+                continue
+            if (_y, _x) == (_dy, _dx):
+                break
+            for _oy, _ox, _dn in _dirs:
+                _ny, _nx = _y + _oy, _x + _ox
+                if 0 <= _ny < 16 and 0 <= _nx < 16:
+                    _nd = _d + _cost[_ny][_nx]
+                    if _nd < _dist.get((_ny, _nx), float("inf")):
+                        _dist[(_ny, _nx)] = _nd
+                        _prev[(_ny, _nx)] = ((_y, _x), _dn)
+                        _hq.heappush(_pq, (_nd, _ny, _nx))
+        if (_dy, _dx) not in _prev and (_dy, _dx) != (_sy, _sx):
+            return None
+        _cur = (_dy, _dx)
+        _first = None
+        while _cur != (_sy, _sx):
+            _p, _dn = _prev[_cur]
+            _first = _dn
+            _cur = _p
+        if _first in arrows:
+            return _first
+        return None
+    except Exception:
+        return None
+
+
 class MyAgent(Agent):
     MAX_ACTIONS = 1600
 
@@ -1074,7 +1134,7 @@ class MyAgent(Agent):
                     gid0 = self._gate_id(grid)
                     if gid0 is not None:
                         self._bfs_seen.add(gid0)
-                if self._bfs_turns < 400:
+                if self._bfs_turns < 1200:
                     while self._bfs_i < len(self._bfs_queue):
                         _seq = self._bfs_queue[self._bfs_i]
                         if self._bfs_j < 0:
@@ -1393,7 +1453,7 @@ class MyAgent(Agent):
                 return None
             if self._skf_stage == 2:
                 self._skf_fires += 1
-                _nm2 = "GameAction.ACTION7" if self._skf_fires <= 2 else None
+                _nm2 = "GameAction.ACTION3" if self._skf_fires <= 2 else None
                 if self._skf_fires == 3:
                     _nm2 = "clickblock"
                 if self._skf_fires >= 4:
