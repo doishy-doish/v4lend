@@ -310,6 +310,7 @@ class MyAgent(Agent):
         self._bfs_win = None
         self._bfs_lc0 = 0
         self._bfs_level = -1
+        self._nspiral_done = False
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -354,6 +355,7 @@ class MyAgent(Agent):
             try:
                 cur = _sk_cursor(grid)
                 d["cy"] = cur[0] if cur else -1
+                d["cx"] = cur[1] if cur else -1
             except Exception:
                 d["cy"] = -1
             try:
@@ -556,6 +558,8 @@ class MyAgent(Agent):
                 "bfs": [len(self._bfs_queue), self._bfs_i, len(self._bfs_seen), self._bfs_win],
                 "sk_trace": self._sk_trace,
                 "combo_win": self._combo_win, "combo_done": self._combo_i,
+                "probe_disp": {int(_cc): {_nn: [round(float(_v[0]), 2), round(float(_v[1]), 2)] for _nn, _v in _ent.items()} for _cc, _ent in (getattr(self, "_probe_disp", {}) or {}).items()},
+                "probe_cnt": {str(_k): int(_v) for _k, _v in (getattr(self, "_probe_cnt", {}) or {}).items()},
                 "scal": self._scal, "ff": self._ff,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
@@ -1033,6 +1037,18 @@ class MyAgent(Agent):
             if self._cbest is None:
                 return None
             self._cexploit_n += 1
+            if self._gate_clicks and not getattr(self, "_nspiral_done", False) and self._cexploit_n >= 2:
+                try:
+                    self._nspiral_done = True
+                    _nbrs = []
+                    for (_gx, _gy) in self._gate_clicks[:6]:
+                        for _dx, _dy in ((4, 0), (-4, 0), (0, 4), (0, -4), (8, 0), (-8, 0), (0, 8), (0, -8)):
+                            _nx, _ny = min(63, max(0, _gx + _dx)), min(63, max(0, _gy + _dy))
+                            _nbrs.append((_nx, _ny))
+                    self._csweep = _nbrs + list(self._csweep_all or [])
+                    self._need_reset = True
+                except Exception:
+                    pass
             if self._gate_clicks and self._cexploit_n >= 6:
                 if not self._bfs_queue and self._bfs_i == 0 and self._bfs_j == -1 and not self._bfs_seen:
                     self._bfs_queue = [[c] for c in self._gate_clicks[:6]]
@@ -1046,6 +1062,11 @@ class MyAgent(Agent):
                             self._bfs_lc0 = self._best_lc
                             self._bfs_j = 0
                             self._expect_reset = True
+                            try:
+                                self._att = 0
+                                self._gpar = 0
+                            except Exception:
+                                pass
                             self._bfs_turns += 1
                             return GameAction.RESET
                         if self._bfs_j < len(_seq):
@@ -1057,6 +1078,11 @@ class MyAgent(Agent):
                                 self._bfs_i += 1
                                 self._bfs_j = -1
                                 self._expect_reset = True
+                                try:
+                                    self._att = 0
+                                    self._gpar = 0
+                                except Exception:
+                                    pass
                                 return GameAction.RESET
                             _nm = str(_a)
                             self._act_use[_nm] += 1
@@ -1082,6 +1108,16 @@ class MyAgent(Agent):
             if self._need_reset:
                 self._need_reset = False
                 self._expect_reset = True
+                try:
+                    self._att = 0
+                    self._gpar = 0
+                except Exception:
+                    pass
+                try:
+                    self._att = 0
+                    self._gpar = 0
+                except Exception:
+                    pass
                 return GameAction.RESET
             px, py = self._cbest
             a = six[0]
@@ -1098,6 +1134,11 @@ class MyAgent(Agent):
         if self._need_reset:
             self._need_reset = False
             self._expect_reset = True
+            try:
+                self._att = 0
+                self._gpar = 0
+            except Exception:
+                pass
             return GameAction.RESET
         px, py = self._csweep.pop(0)
         a = six[0]
@@ -1146,6 +1187,11 @@ class MyAgent(Agent):
             self._combo_eval = self._best_lc
             self._combo_stage = 1
             self._expect_reset = True
+            try:
+                self._att = 0
+                self._gpar = 0
+            except Exception:
+                pass
             return GameAction.RESET
         a_nm, b_nm = self._combo_pairs[self._combo_i]
         nm = a_nm if self._combo_stage == 1 else b_nm
@@ -1638,6 +1684,11 @@ class MyAgent(Agent):
                 self._stall = 0
                 self._since_novel = 0
                 self._expect_reset = True
+                try:
+                    self._att = 0
+                    self._gpar = 0
+                except Exception:
+                    pass
                 return GameAction.RESET
             self._replay = None
         if self._stall >= STALL_FORCE_SIMPLE and simple:
