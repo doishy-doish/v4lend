@@ -65,7 +65,7 @@ def _frame_shots(agent):
     except Exception:
         return shots
     n = len(frs)
-    idxs = [0, n // 2, n - 1] if n > 2 else list(range(n))
+    idxs = list(range(min(12, n))) + ([n - 1] if n > 12 else [])
     for i in idxs:
         try:
             shots.append({"idx": i, "grid": _dump_grid(frs[i])})
