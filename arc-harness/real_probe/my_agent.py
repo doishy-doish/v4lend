@@ -12,6 +12,10 @@ SALIENT = set(range(6, 16))
 
 STALL_FORCE_SIMPLE = 8
 STALL_ROTATE = 3
+BACKTRACK_STALL = 12
+MAX_BACKTRACKS = 3
+MAX_REPLAY = 60
+BACKTRACK_BEFORE_TURN = 150
 
 
 def _grid(latest_frame):
@@ -142,6 +146,12 @@ class MyAgent(Agent):
         self._stall = 0
         self._prev_h = None
         self._prev_sig = None
+        self._effective = set()
+        self._prefix = []
+        self._snaps = []
+        self._replay = None
+        self._backtracks = 0
+        self._expect_reset = False
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -150,22 +160,60 @@ class MyAgent(Agent):
         return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited),
                 "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug,
                 "target_use": {"%d,%d" % k: v for k, v in self._target_use.items()}, "noop": dict(self._noop_count),
-                "pairs_tried": len(self._pair_seen)}
+                "pairs_tried": len(self._pair_seen), "backtracks": self._backtracks,
+                "effective": sorted(self._effective), "snaps": len(self._snaps)}
 
-    def _simple_pick(self, simple):
+    def _record_choice(self, h, sig):
+        self._prev_h = h
+        self._prev_sig = sig
+        self._prefix.append(sig)
+
+    def _simple_pick(self, simple, h):
         if not simple:
             return GameAction.RESET
-        names = sorted(set(str(a) for a in simple))
-        name = names[self._simple_idx % len(names)]
-        self._simple_idx += 1
+        byname = {}
         for a in simple:
-            if str(a) == name:
-                self._act_use[str(a)] += 1
-                self._prev_sig = (str(a), -1, -1)
-                return a
-        a = simple[0]
-        self._act_use[str(a)] += 1
+            byname.setdefault(str(a), a)
+        eff = sorted([n for n in byname if n in self._effective])
+        rest = sorted([n for n in byname if n not in self._effective])
+        order = eff + rest or sorted(byname)
+        name = order[self._simple_idx % len(order)]
+        self._simple_idx += 1
+        a = byname[name]
+        self._act_use[name] += 1
+        self._record_choice(h, (name, -1, -1))
         return a
+
+    def _replay_pick(self, cands, h):
+        while self._replay:
+            nm, x, y = self._replay[0]
+            hit = None
+            for a in cands:
+                if str(a) != nm:
+                    continue
+                if x == -1 and not _complex(a):
+                    hit = a
+                    break
+                if x != -1 and _complex(a):
+                    try:
+                        a.set_data({"x": x, "y": y})
+                    except Exception:
+                        continue
+                    hit = a
+                    break
+            if hit is None:
+                self._replay = None
+                return None
+            self._replay.pop(0)
+            self._act_use[nm] += 1
+            if x != -1:
+                self._target_use[(y, x)] += 1
+                if h is not None:
+                    self._pair_seen.add((h, nm, x, y))
+            self._record_choice(h, (nm, x, y))
+            return hit
+        self._replay = None
+        return None
 
     def choose_action(self, frames, latest_frame):
         if self._frame_keys is None:
@@ -174,6 +222,12 @@ class MyAgent(Agent):
             except Exception:
                 self._frame_keys = []
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
+            self._prefix = []
+            self._last_h = None
+            self._stall = 0
+            if not self._expect_reset:
+                self._replay = None
+            self._expect_reset = False
             return GameAction.RESET
         try:
             raw = list(latest_frame.available_actions) if latest_frame.available_actions is not None else [a for a in GameAction if a is not GameAction.RESET]
@@ -200,10 +254,18 @@ class MyAgent(Agent):
             h = _canon(grid) if grid else None
         except Exception:
             h = None
+        novel = h is not None and h not in self._visited
         if h is not None:
-            if h in self._visited:
+            if not novel:
                 self._repeats += 1
             self._visited[h] += 1
+        if novel:
+            if self._prev_sig is not None:
+                self._effective.add(self._prev_sig[0])
+            if len(self._prefix) <= MAX_REPLAY:
+                self._snaps.append((list(self._prefix), h))
+                self._snaps.sort(key=lambda s: len(s[0]))
+                self._snaps = self._snaps[:5]
         if self._prev_sig is not None and self._prev_h is not None and h is not None:
             if h == self._prev_h:
                 self._noop_count[self._prev_sig[0]] += 1
@@ -217,9 +279,23 @@ class MyAgent(Agent):
         cands = [a for a in avail if a is not GameAction.RESET]
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
+        if self._replay:
+            hit = self._replay_pick(cands, h)
+            if hit is not None:
+                return hit
+        if (self._stall >= BACKTRACK_STALL and self._backtracks < MAX_BACKTRACKS
+                and self._turns <= BACKTRACK_BEFORE_TURN and self._snaps):
+            self._replay = list(self._snaps[0][0])
+            if self._replay:
+                self._backtracks += 1
+                self._prefix = []
+                self._last_h = None
+                self._stall = 0
+                self._expect_reset = True
+                return GameAction.RESET
+            self._replay = None
         if self._stall >= STALL_FORCE_SIMPLE and simple:
-            self._prev_h = h
-            return self._simple_pick(simple)
+            return self._simple_pick(simple, h)
         if grid and six:
             try:
                 tg = _targets(grid)
@@ -235,10 +311,11 @@ class MyAgent(Agent):
                         nm = str(a)
                         if h is not None and (h, nm, x, y) in self._pair_seen:
                             continue
-                        scored.append((tu + self._noop_count.get(nm, 0) * 10, self._act_use[nm], (y, x), a))
+                        eff = 0 if nm in self._effective else 1
+                        scored.append((eff, tu + self._noop_count.get(nm, 0) * 10, self._act_use[nm], (y, x), a))
                 if scored:
-                    scored.sort(key=lambda t: (t[0], t[1]))
-                    _, _, (y, x), a = scored[0]
+                    scored.sort(key=lambda t: (t[0], t[1], t[2]))
+                    _, _, _, (y, x), a = scored[0]
                     try:
                         a.set_data({"x": x, "y": y})
                         nm = str(a)
@@ -246,18 +323,15 @@ class MyAgent(Agent):
                             self._pair_seen.add((h, nm, x, y))
                         self._act_use[nm] += 1
                         self._target_use[(y, x)] += 1
-                        self._prev_h = h
-                        self._prev_sig = (nm, x, y)
+                        self._record_choice(h, (nm, x, y))
                         return a
                     except Exception:
                         pass
         if simple:
-            self._prev_h = h
-            return self._simple_pick(simple)
+            return self._simple_pick(simple, h)
         if cands:
             a = cands[0]
             self._act_use[str(a)] += 1
-            self._prev_h = h
-            self._prev_sig = (str(a), -1, -1)
+            self._record_choice(h, (str(a), -1, -1))
             return a
         return GameAction.RESET
