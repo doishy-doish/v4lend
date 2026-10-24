@@ -149,7 +149,7 @@ class MyAgent(Agent):
     def stats(self):
         return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited),
                 "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug,
-                "target_use": dict(self._target_use), "noop": dict(self._noop_count),
+                "target_use": {"%d,%d" % k: v for k, v in self._target_use.items()}, "noop": dict(self._noop_count),
                 "pairs_tried": len(self._pair_seen)}
 
     def _simple_pick(self, simple):
