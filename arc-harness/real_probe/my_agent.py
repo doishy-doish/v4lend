@@ -333,6 +333,16 @@ class MyAgent(Agent):
         except Exception:
             d["pa"] = "?"
         try:
+            _sig = self._prefix[-1] if self._prefix else None
+            if _sig is not None and len(_sig) > 2 and _sig[1] != -1:
+                d["xy"] = [_sig[1], _sig[2]]
+        except Exception:
+            pass
+        try:
+            d["cl"] = int(getattr(self, "_cur_lc", -1))
+        except Exception:
+            pass
+        try:
             gid = self._game_id
         except Exception:
             gid = ""
@@ -373,6 +383,11 @@ class MyAgent(Agent):
                 d["bar"] = int(round(self._barfill * 100))
             except Exception:
                 d["bar"] = -1
+            try:
+                d["st"] = int(self._skf_stage)
+                d["fv"] = int(getattr(self, "_skf_fv", -1))
+            except Exception:
+                pass
         elif not self._simple_only:
             try:
                 gid2 = self._gate_id(grid)
@@ -386,10 +401,22 @@ class MyAgent(Agent):
                 c = self._nav_cursor
                 if c is not None and c in cent:
                     d["cxy"] = [round(float(cent[c][0]), 1), round(float(cent[c][1]), 1)]
+                    d["cn"] = int(cent[c][2])
                 else:
                     d["cxy"] = [-1, -1]
+                    d["cn"] = 0
+                try:
+                    _top = sorted(cent.items(), key=lambda _kv: -_kv[1][2])[:3]
+                    d["top"] = [[int(_k), int(_v[2])] for _k, _v in _top]
+                except Exception:
+                    pass
             except Exception:
                 d["cxy"] = [-1, -1]
+            try:
+                if self._nav_last:
+                    d["nl"] = self._nav_last
+            except Exception:
+                pass
         return d
 
     def _forced_fire(self):
@@ -1023,9 +1050,17 @@ class MyAgent(Agent):
                 return None
             if self._skf_stage == 1:
                 self._skf_fires += 1
-                if self._skf_fires >= 15:
+                try:
+                    _hold = 1 if (self._skf_ti % 2 == 0) else 15
+                except Exception:
+                    _hold = 15
+                if self._skf_fires >= _hold:
                     self._skf_stage = 2
                     self._skf_fires = 0
+                    try:
+                        self._skf_fv = _hold
+                    except Exception:
+                        pass
                 if "GameAction.ACTION4" in byname:
                     self._sk_clicks += 1
                     self._record_choice(h, ("GameAction.ACTION4", -1, -1))
@@ -1184,6 +1219,10 @@ class MyAgent(Agent):
             _lc = int(_lc)
         except Exception:
             _lc = None
+        try:
+            self._cur_lc = int(_lc) if _lc is not None else -1
+        except Exception:
+            self._cur_lc = -1
         if _lc is not None and _lc > self._best_lc:
             self._best_lc = _lc
             try:
