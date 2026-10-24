@@ -40,7 +40,7 @@ t0 = time.time()
 agent.main()
 dt = time.time() - t0
 final = agent.frames[-1]
-out = {"game": args.game, "state": str(final.state), "levels": final.levels_completed, "actions": agent.action_counter, "wall_s": round(dt, 1), "frame_keys": agent._frame_keys, "states": dict(Counter(agent._states_seen)), "harness": agent.stats()
+out = {"game": args.game, "state": str(final.state), "levels": final.levels_completed, "actions": agent.action_counter, "wall_s": round(dt, 1), "frame_keys": agent._frame_keys, "states": dict(Counter(agent._states_seen)), "harness": agent.stats()}
 print("PROBE_RESULT " + json.dumps(out))
 with open("probe-results.json", "w") as f:
     json.dump(out, f)
