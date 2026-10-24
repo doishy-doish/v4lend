@@ -297,6 +297,14 @@ class MyAgent(Agent):
         self._cpair = []
         self._cpair_i = 0
         self._cpair_stage = 0
+        self._gate_clicks = []
+        self._bfs_queue = []
+        self._bfs_i = 0
+        self._bfs_j = -1
+        self._bfs_seen = set()
+        self._bfs_turns = 0
+        self._bfs_win = None
+        self._bfs_lc0 = 0
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -327,6 +335,7 @@ class MyAgent(Agent):
                 "nav_steps": {k: [round(float(v[0]), 2), round(float(v[1]), 2)] for k, v in self._nav_steps.items()},
                 "sk_mode": self._skf_phase, "sk_ti": self._skf_ti, "sk_tip": self._skf_tip,
                 "ctop": [[int(s), list(p)] for s, p in self._ctop[:4]],
+                "bfs": [len(self._bfs_queue), self._bfs_i, len(self._bfs_seen), self._bfs_win],
                 "combo_win": self._combo_win, "combo_done": self._combo_i,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
@@ -624,6 +633,18 @@ class MyAgent(Agent):
                 return byname[best_a]
             return None
         return None
+    def _gate_id(self, grid):
+        try:
+            m = set() if not self._mask else set(self._mask)
+            sub = [list(row) for row in grid[1:44]]
+            mm = set()
+            for (y, x) in m:
+                if 1 <= y < 44:
+                    mm.add((y - 1, x))
+            return _canon_masked(sub, mm)
+        except Exception:
+            return None
+
     def _clickonly_pick(self, grid, h, six):
         if not six:
             return None
@@ -668,6 +689,8 @@ class MyAgent(Agent):
                 self._ctop.append((score, self._cpending[1]))
                 self._ctop.sort(reverse=True)
                 self._ctop = self._ctop[:6]
+                if _dg > 50 and self._cpending[1] not in self._gate_clicks:
+                    self._gate_clicks.append(self._cpending[1])
             except Exception:
                 pass
             self._cpending = None
@@ -676,43 +699,48 @@ class MyAgent(Agent):
             if self._cbest is None:
                 return None
             self._cexploit_n += 1
-            if self._cpair or (self._cexploit_n >= 25 and self._csweep_all):
-                if not self._cpair:
-                    try:
-                        _short = [p for s, p in self._ctop[1:5] if p != self._cbest]
-                    except Exception:
-                        _short = []
-                    if len(_short) < 3:
-                        _short += [p for p in self._csweep_all[:10] if p != self._cbest and p not in _short]
-                    _short = _short[:4]
-                    self._cpair = [(self._cbest, p) for p in _short]
-                    self._cpair_i = 0
-                    self._cpair_stage = 0
-                if self._cpair_i < len(self._cpair):
-                    (_ax, _ay), (_bx, _by) = self._cpair[self._cpair_i]
-                    if self._cpair_stage == 0:
-                        self._cpair_stage = 1
-                        self._expect_reset = True
-                        return GameAction.RESET
-                    _px, _py = (_ax, _ay) if self._cpair_stage == 1 else (_bx, _by)
-                    _a = six[0]
-                    try:
-                        _a.set_data({"x": _px, "y": _py})
-                    except Exception:
-                        self._cpair_stage = 0
-                        self._cpair_i += 1
-                        return GameAction.RESET
-                    _nm = str(_a)
-                    self._act_use[_nm] += 1
-                    self._sk_clicks += 1
-                    self._record_choice(h, (_nm, _px, _py))
-                    if self._cpair_stage == 1:
-                        self._cpair_stage = 2
-                    else:
-                        self._cpair_stage = 0
-                        self._cpair_i += 1
-                    return _a
-                self._cpair = []
+            if self._gate_clicks and self._cexploit_n >= 10:
+                if not self._bfs_queue and self._bfs_i == 0 and self._bfs_j == -1 and not self._bfs_seen:
+                    self._bfs_queue = [[c] for c in self._gate_clicks[:6]]
+                    gid0 = self._gate_id(grid)
+                    if gid0 is not None:
+                        self._bfs_seen.add(gid0)
+                if self._bfs_turns < 130:
+                    while self._bfs_i < len(self._bfs_queue):
+                        _seq = self._bfs_queue[self._bfs_i]
+                        if self._bfs_j < 0:
+                            self._bfs_lc0 = self._best_lc
+                            self._bfs_j = 0
+                            self._expect_reset = True
+                            self._bfs_turns += 1
+                            return GameAction.RESET
+                        if self._bfs_j < len(_seq):
+                            _px, _py = _seq[self._bfs_j]
+                            _a = six[0]
+                            try:
+                                _a.set_data({"x": _px, "y": _py})
+                            except Exception:
+                                self._bfs_i += 1
+                                self._bfs_j = -1
+                                self._expect_reset = True
+                                return GameAction.RESET
+                            _nm = str(_a)
+                            self._act_use[_nm] += 1
+                            self._sk_clicks += 1
+                            self._record_choice(h, (_nm, _px, _py))
+                            self._bfs_j += 1
+                            self._bfs_turns += 1
+                            return _a
+                        if self._best_lc > self._bfs_lc0:
+                            self._bfs_win = list(_seq)
+                        _gid = self._gate_id(grid)
+                        if _gid is not None and _gid not in self._bfs_seen and len(_seq) < 4:
+                            self._bfs_seen.add(_gid)
+                            for _gc in self._gate_clicks[:6]:
+                                self._bfs_queue.append(_seq + [_gc])
+                        self._bfs_i += 1
+                        self._bfs_j = -1
+                    self._bfs_queue = []
             if self._need_reset:
                 self._need_reset = False
                 self._expect_reset = True
@@ -832,9 +860,9 @@ class MyAgent(Agent):
             self._skf_ti += 1
             return None
         if self._skf_phase == "aim":
-            if cy < _ty - 1:
+            if cy < _ty - 3:
                 nm = "GameAction.ACTION2"
-            elif cy > _ty + 1:
+            elif cy > _ty + 3:
                 nm = "GameAction.ACTION1"
             else:
                 self._skf_phase = "fire"
