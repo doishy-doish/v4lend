@@ -277,6 +277,7 @@ class MyAgent(Agent):
         self._cbest_score = -1
         self._cpending = None
         self._cpre = None
+        self._cpre_grid = None
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -467,27 +468,44 @@ class MyAgent(Agent):
             if self._nav_cursor not in cent:
                 return None
             cy, cx, _cc = cent[self._nav_cursor]
-            cands_c = [(c, v) for c, v in cent.items() if c != self._nav_bg and c != 0 and c != self._nav_cursor and v[2] >= 4 and c not in self._nav_avoid]
+            cands_c = []
+            try:
+                for _s in _segments(grid):
+                    _sc = _s["color"]
+                    if _sc == self._nav_bg or _sc == 0 or _sc == self._nav_cursor or _sc in self._nav_avoid:
+                        continue
+                    if _s["area"] < 9:
+                        continue
+                    _y1, _x1, _y2, _x2 = _s["bbox"]
+                    _w = _x2 - _x1 + 1
+                    _hh = _y2 - _y1 + 1
+                    if not (2 <= _w <= 32 and 2 <= _hh <= 32):
+                        continue
+                    if _y1 >= SK48_STRIP_Y:
+                        continue
+                    cands_c.append((_s["area"], _s))
+            except Exception:
+                pass
             if not cands_c:
                 return None
-            cands_c.sort(key=lambda t: t[1][2])
-            order = [cands_c[0]] + [t for t in cands_c[1:] if t[0] not in getattr(self, "_nav_dead", set())]
-            tc, tv = order[0][0], order[0][1]
+            cands_c.sort(key=lambda t: t[0])
+            _blk = cands_c[0][1]
+            tc = _blk["color"]
+            tv = None
             tgt = None
             bestd = None
-            for yy in range(max(0, int(cy) - 3), min(len(grid), int(cy) + 4)):
-                for xx in range(max(0, int(cx) - 3), min(len(grid[0]), int(cx) + 4)):
-                    if grid[yy][xx] == tc:
-                        d = abs(yy - cy) + abs(xx - cx)
-                        if bestd is None or d < bestd:
-                            bestd, tgt = d, (yy, xx)
+            try:
+                _y1, _x1, _y2, _x2 = _blk["bbox"]
+                for _yy in range(_y1, _y2 + 1):
+                    for _xx in range(_x1, _x2 + 1):
+                        if grid[_yy][_xx] == tc:
+                            _d = abs(_yy - cy) + abs(_xx - cx)
+                            if bestd is None or _d < bestd:
+                                bestd, tgt = _d, (_yy, _xx)
+            except Exception:
+                pass
             if tgt is None:
-                cells = [(abs(v[0] - cy) + abs(v[1] - cx), c) for c, v in cands_c]
-                cells.sort()
-                tc = cells[0][1]
-                tv = cent[tc]
-                tgt = (int(tv[0]), int(tv[1]))
-                bestd = cells[0][0]
+                return None
             if bestd is not None and bestd < 1.6:
                 for nm in sorted(self._nav_interact, key=lambda n: self._act_use[n]):
                     if h is not None and (h, nm, -1, -1) in self._pair_seen:
@@ -591,10 +609,19 @@ class MyAgent(Agent):
             self._need_reset = True
         if self._cpending is not None:
             try:
+                _dg = 0
+                if grid is not None and self._cpre_grid is not None and len(grid) == len(self._cpre_grid):
+                    _top = min(len(grid), SK48_STRIP_Y)
+                    for _yy in range(_top):
+                        _ra, _rb = grid[_yy], self._cpre_grid[_yy]
+                        for _xx in range(min(len(_ra), len(_rb))):
+                            if _ra[_xx] != _rb[_xx]:
+                                _dg += 1
                 changed = (h != self._cpre)
             except Exception:
+                _dg = 0
                 changed = False
-            score = (self._best_lc - self._cpending[0]) * 1000 + (1 if changed else 0)
+            score = (self._best_lc - self._cpending[0]) * 100000 + _dg
             if score > self._cbest_score:
                 self._cbest_score = score
                 self._cbest = self._cpending[1]
@@ -636,6 +663,10 @@ class MyAgent(Agent):
         self._act_use[nm] += 1
         self._cpending = (self._best_lc, (px, py))
         self._cpre = h
+        try:
+            self._cpre_grid = [list(_r) for _r in grid] if grid is not None else None
+        except Exception:
+            self._cpre_grid = None
         self._need_reset = True
         self._sk_clicks += 1
         self._record_choice(h, (nm, px, py))
