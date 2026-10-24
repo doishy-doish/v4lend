@@ -371,6 +371,7 @@ class MyAgent(Agent):
         self._bfs_lc0 = 0
         self._bfs_lastc = None
         self._bfs_runlen = 0
+        self._bfs_restarts = 0
         self._bfs_level = -1
         self._nspiral_done = False
         self._nav_bg = 0
@@ -910,6 +911,30 @@ class MyAgent(Agent):
             except Exception:
                 d_stall = 0
             if (bestd is not None and bestd < 1.6) or d_stall >= 6:
+                try:
+                    self._ls_arr = int(getattr(self, "_ls_arr", 0)) + 1
+                except Exception:
+                    self._ls_arr = 1
+                try:
+                    _ramdn = getattr(self, "_ls_ram", None)
+                    if int(getattr(self, "_ls_arr", 0)) > 4 and _ramdn is not None:
+                        _ramnm = self._nav_arrows.get(_ramdn)
+                        if _ramnm is not None and _ramnm in byname:
+                            self._act_use[_ramnm] += 1
+                            self._record_choice(h, (_ramnm, -1, -1))
+                            if int(getattr(self, "_ls_arr", 0)) > 7:
+                                try:
+                                    _btc3 = int(tc) if tc is not None else -1
+                                    if _btc3 >= 0:
+                                        self._nav_dead.add(_btc3)
+                                        self._nav_last = None
+                                        self._ls_prevd = None
+                                        self._ls_arr = 0
+                                except Exception:
+                                    pass
+                            return byname[_ramnm]
+                except Exception:
+                    pass
                 if d_stall >= 6:
                     try:
                         self._ls_stall = 0
@@ -1011,6 +1036,10 @@ class MyAgent(Agent):
             except Exception:
                 pass
             if best_a is not None:
+                try:
+                    self._ls_ram = best_dn
+                except Exception:
+                    pass
                 if best_dn == self._nav_last_dir:
                     self._nav_same_dir += 1
                 else:
@@ -1216,7 +1245,22 @@ class MyAgent(Agent):
                                 self._bfs_queue.append(_seq + [_gc])
                         self._bfs_i += 1
                         self._bfs_j = -1
-                    self._bfs_queue = []
+                    try:
+                        _rs = int(getattr(self, "_bfs_restarts", 0))
+                    except Exception:
+                        _rs = 0
+                    if self._bfs_win is None and _rs < 8 and self._bfs_turns < 1200:
+                        try:
+                            self._bfs_restarts = _rs + 1
+                            self._bfs_queue = [[c] for c in self._gate_clicks[:8]]
+                            self._bfs_i = 0
+                            self._bfs_j = -1
+                            self._bfs_lastc = None
+                            self._bfs_runlen = 0
+                        except Exception:
+                            self._bfs_queue = []
+                    else:
+                        self._bfs_queue = []
             if self._need_reset:
                 self._need_reset = False
                 self._expect_reset = True
@@ -1476,10 +1520,10 @@ class MyAgent(Agent):
                 return None
             if self._skf_stage == 2:
                 self._skf_fires += 1
-                _nm2 = "GameAction.ACTION3" if self._skf_fires <= 2 else None
-                if self._skf_fires == 3:
+                _nm2 = "GameAction.ACTION3" if self._skf_fires == 1 else None
+                if self._skf_fires == 2:
                     _nm2 = "clickblock"
-                if self._skf_fires >= 4:
+                if self._skf_fires >= 3:
                     try:
                         _chain = (int(getattr(self, "_skf_hits", 0)) % 2 == 1)
                     except Exception:
