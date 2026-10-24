@@ -17,6 +17,12 @@ MAX_BACKTRACKS = 3
 MAX_REPLAY = 60
 BACKTRACK_BEFORE_TURN = 150
 
+SK48_CURSOR_COLORS = (6, 14)
+SK48_BLOCK_COLORS = (6, 8, 9, 14)
+SK48_STRIP_Y = 44
+SK48_BOARD_X = 16
+SK48_ALIGN_TOL = 2
+
 
 def _grid(latest_frame):
     try:
@@ -124,6 +130,63 @@ def _complex(a):
         return False
 
 
+def _sk_cursor(grid):
+    best = None
+    try:
+        for s in _segments(grid):
+            if s["color"] not in SK48_CURSOR_COLORS or s["area"] < 4:
+                continue
+            y1, x1, y2, x2 = s["bbox"]
+            if x2 >= SK48_BOARD_X or y1 >= SK48_STRIP_Y:
+                continue
+            if best is None or s["area"] > best["area"]:
+                best = s
+    except Exception:
+        return None
+    if best is None:
+        return None
+    y1, x1, y2, x2 = best["bbox"]
+    return ((y1 + y2) // 2, best["color"])
+
+
+def _sk_blocks(grid):
+    out = {}
+    try:
+        for s in _segments(grid):
+            if s["color"] not in SK48_BLOCK_COLORS or s["area"] < 9:
+                continue
+            y1, x1, y2, x2 = s["bbox"]
+            if x1 <= SK48_BOARD_X or y2 >= SK48_STRIP_Y:
+                continue
+            if s["color"] not in out or s["area"] > out[s["color"]][2]:
+                out[s["color"]] = ((y1 + y2) // 2, (x1 + x2) // 2, s["area"])
+    except Exception:
+        pass
+    return out
+
+
+def _sk_strip_order(grid):
+    seq = []
+    try:
+        h = len(grid)
+        w = len(grid[0]) if h else 0
+        for y in range(SK48_STRIP_Y, h):
+            row = grid[y]
+            x = 0
+            while x < w:
+                c = row[x]
+                x2 = x
+                while x2 + 1 < w and row[x2 + 1] == c:
+                    x2 += 1
+                if c in SK48_BLOCK_COLORS and (x2 - x + 1) >= 3:
+                    if not seq or seq[-1] != c:
+                        seq.append(c)
+                x = x2 + 1
+    except Exception:
+        pass
+    return [c for c in seq if c in SK48_BLOCK_COLORS]
+
+
 class MyAgent(Agent):
     MAX_ACTIONS = 200
 
@@ -153,6 +216,14 @@ class MyAgent(Agent):
         self._replay = None
         self._backtracks = 0
         self._expect_reset = False
+        try:
+            self._game_id = kwargs.get("game_id", "")
+        except Exception:
+            self._game_id = ""
+        self._sk_move = {}
+        self._sk_prev_cy = None
+        self._sk_target = None
+        self._sk_clicks = 0
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -162,7 +233,9 @@ class MyAgent(Agent):
                 "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug,
                 "target_use": {"%d,%d" % k: v for k, v in self._target_use.items()}, "noop": dict(self._noop_count),
                 "pairs_tried": len(self._pair_seen), "backtracks": self._backtracks,
-                "effective": sorted(self._effective), "snaps": len(self._snaps)}
+                "effective": sorted(self._effective), "snaps": len(self._snaps),
+                "sk_target": self._sk_target, "sk_clicks": self._sk_clicks,
+                "sk_move": dict(self._sk_move)}
 
     def _record_choice(self, h, sig):
         self._prev_h = h
@@ -184,6 +257,64 @@ class MyAgent(Agent):
         self._act_use[name] += 1
         self._record_choice(h, (name, -1, -1))
         return a
+
+    def _sk48_pick(self, grid, h, simple, six):
+        cur = _sk_cursor(grid)
+        blocks = _sk_blocks(grid)
+        if cur is None or not blocks:
+            return None
+        cy, _ccol = cur
+        if (self._prev_sig is not None and self._sk_prev_cy is not None
+                and self._prev_sig[0] in [str(a) for a in simple]
+                and self._prev_sig[1] == -1):
+            dy = cy - self._sk_prev_cy
+            nm0 = self._prev_sig[0]
+            old = self._sk_move.get(nm0, 0.0)
+            self._sk_move[nm0] = old * 0.7 + float(dy) * 0.3
+        self._sk_prev_cy = cy
+        mag = 6 if 6 in blocks else (14 if 14 in blocks else None)
+        order = [c for c in _sk_strip_order(grid) if c in (8, 9) or (mag is not None and c == mag)]
+        if not order:
+            order = [c for c in (8, mag, 9) if c is not None]
+        target = None
+        for c in order:
+            if c in blocks:
+                target = c
+                break
+        if target is None:
+            return None
+        self._sk_target = target
+        ty, tx, _ta = blocks[target]
+        err = ty - cy
+        if abs(err) <= SK48_ALIGN_TOL:
+            a = six[0]
+            try:
+                a.set_data({"x": tx, "y": ty})
+            except Exception:
+                return None
+            nm = str(a)
+            if h is not None:
+                self._pair_seen.add((h, nm, tx, ty))
+            self._act_use[nm] += 1
+            self._target_use[(ty, tx)] += 1
+            self._sk_clicks += 1
+            self._record_choice(h, (nm, tx, ty))
+            return a
+        want = 1 if err > 0 else -1
+        best_nm = None
+        best_v = None
+        for nm, v in self._sk_move.items():
+            if (want > 0 and v > 0.3) or (want < 0 and v < -0.3):
+                if best_v is None or abs(v) > abs(best_v):
+                    best_v = v
+                    best_nm = nm
+        if best_nm is not None:
+            for a in simple:
+                if str(a) == best_nm:
+                    self._act_use[best_nm] += 1
+                    self._record_choice(h, (best_nm, -1, -1))
+                    return a
+        return self._simple_pick(simple, h)
 
     def _replay_pick(self, cands, h):
         while self._replay:
@@ -288,6 +419,10 @@ class MyAgent(Agent):
             hit = self._replay_pick(cands, h)
             if hit is not None:
                 return hit
+        if self._game_id == "sk48" and grid and six and simple:
+            sk_hit = self._sk48_pick(grid, h, simple, six)
+            if sk_hit is not None:
+                return sk_hit
         if ((self._stall >= BACKTRACK_STALL or self._since_novel >= 25) and self._backtracks < MAX_BACKTRACKS
                 and self._turns <= BACKTRACK_BEFORE_TURN and self._snaps):
             self._replay = list(self._snaps[0][0])
