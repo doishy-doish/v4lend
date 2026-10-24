@@ -212,7 +212,7 @@ def _sk_strip_order(grid):
 
 
 class MyAgent(Agent):
-    MAX_ACTIONS = 400
+    MAX_ACTIONS = 800
 
     def __init__(self, *args, **kwargs):
         try:
@@ -413,6 +413,22 @@ class MyAgent(Agent):
                 d["ord"] = [int(_c) for _c in _sk_strip_order(grid)][:8]
             except Exception:
                 pass
+            try:
+                if self._turns % 10 == 0:
+                    _all6 = []
+                    _bkeys = {}
+                    for _sg in _segments(grid):
+                        if _sg["color"] == 6 and _sg["area"] >= 9:
+                            _y1, _x1, _y2, _x2 = _sg["bbox"]
+                            _all6.append([(_y1 + _y2) // 2, (_x1 + _x2) // 2, int(_sg["area"])])
+                    try:
+                        _bkeys = {int(_k): [int(_v[0]), int(_v[1]), int(_v[2])] for _k, _v in _sk_blocks(grid).items()}
+                    except Exception:
+                        pass
+                    d["c6"] = _all6[:6]
+                    d["bkeys"] = _bkeys
+            except Exception:
+                pass
         elif not self._simple_only:
             try:
                 gid2 = self._gate_id(grid)
@@ -468,8 +484,25 @@ class MyAgent(Agent):
                             _wcy, _wcx = int(round(_cc0[_cu][0])), int(round(_cc0[_cu][1]))
                             _rows = []
                             for _wy in range(max(0, _wcy - 5), min(len(grid), _wcy + 6)):
-                                _rows.append("".join("X" if grid[_wy][_wx] not in (4,) else "." for _wx in range(max(0, _wcx - 5), min(len(grid[0]), _wcx + 6))))
+                                _rows.append("".join("0123456789abcdef"[grid[_wy][_wx] & 15] for _wx in range(max(0, _wcx - 5), min(len(grid[0]), _wcx + 6))))
                             d["win"] = [int(_wcy), int(_wcx), _rows]
+                            try:
+                                _gh = len(grid)
+                                _gw = len(grid[0])
+                                _mp = []
+                                for _my in range(16):
+                                    _row = ""
+                                    for _mx in range(16):
+                                        from collections import Counter as _CC
+                                        _cc = _CC()
+                                        for _yy in range(_my * _gh // 16, (_my + 1) * _gh // 16):
+                                            for _xx in range(_mx * _gw // 16, (_mx + 1) * _gw // 16):
+                                                _cc[grid[_yy][_xx]] += 1
+                                        _row += "0123456789abcdef"[_cc.most_common(1)[0][0] & 15]
+                                    _mp.append(_row)
+                                d["map16"] = _mp
+                            except Exception:
+                                pass
                     except Exception:
                         pass
             except Exception:
@@ -1289,6 +1322,22 @@ class MyAgent(Agent):
                 if self._skf_fires == 3:
                     _nm2 = "clickblock"
                 if self._skf_fires >= 4:
+                    try:
+                        _chain = (int(getattr(self, "_skf_hits", 0)) % 2 == 1)
+                    except Exception:
+                        _chain = False
+                    if _chain:
+                        try:
+                            self._skf_hits = int(getattr(self, "_skf_hits", 0)) + 1
+                        except Exception:
+                            pass
+                        if int(getattr(self, "_skf_hits", 1)) % 3 == 0:
+                            self._skf_ti += 1
+                        self._skf_phase = "aim"
+                        self._skf_stage = 0
+                        self._skf_fires = 0
+                        self._skf_stag = 0
+                        return None
                     self._skf_stage = 3
                     self._skf_fires = 0
                     return None
