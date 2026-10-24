@@ -16,3 +16,10 @@ jobs:
           grep MemTotal /proc/meminfo
       - run: pip install -q pytest
       - run: cd arc-harness && python3 -m pytest -q
+      - run: cd arc-harness && cat blast-metrics.json || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blast-metrics
+          path: arc-harness/blast-metrics.json
+          if-no-files-found: warn
