@@ -388,6 +388,20 @@ class MyAgent(Agent):
                 d["fv"] = int(getattr(self, "_skf_fv", -1))
             except Exception:
                 pass
+            try:
+                _bl = _sk_blocks(grid)
+                _tc2 = self._skf_order[self._skf_ti] if self._skf_order and self._skf_ti < len(self._skf_order) else None
+                if _tc2 is not None and _tc2 in _bl:
+                    d["tby"] = _bl[_tc2][0]
+                else:
+                    d["tby"] = -1
+            except Exception:
+                d["tby"] = -1
+            try:
+                if self._turns % 10 == 0:
+                    d["ord"] = [int(_c) for _c in _sk_strip_order(grid)]
+            except Exception:
+                pass
         elif not self._simple_only:
             try:
                 gid2 = self._gate_id(grid)
@@ -395,6 +409,20 @@ class MyAgent(Agent):
                 d["gh"] = gh
             except Exception:
                 d["gh"] = -1
+            try:
+                d["att"] = int(getattr(self, "_att", -1))
+            except Exception:
+                pass
+            try:
+                from collections import Counter as _C
+                d["r0"] = [[int(_k), int(_v)] for _k, _v in _C(grid[0]).most_common(3)]
+                _sc = _C()
+                for _yy in range(SK48_STRIP_Y, len(grid)):
+                    _sc.update(grid[_yy])
+                d["strip"] = [[int(_k), int(_v)] for _k, _v in _sc.most_common(3)]
+                d["fh"] = zlib.crc32(str(grid).encode()) & 0xffff
+            except Exception:
+                pass
         else:
             try:
                 cent = self._centroids(grid)
@@ -473,6 +501,14 @@ class MyAgent(Agent):
         self._prev_h = h
         self._prev_sig = sig
         self._prefix.append(sig)
+        try:
+            _nm0 = sig[0] if sig else ""
+            if "RESET" in str(_nm0):
+                self._att = 0
+            else:
+                self._att = int(getattr(self, "_att", 0)) + 1
+        except Exception:
+            pass
         if len(self._sk_trace) < 120:
             try:
                 self._sk_trace.append([self._turns, self._skf_phase, str(sig[0])])
@@ -643,6 +679,19 @@ class MyAgent(Agent):
         if self._m5phase == "nav":
             if self._nav_cursor is None or len(self._nav_arrows) < 1:
                 return None
+            try:
+                _cent0 = self._centroids(grid)
+                if self._nav_cursor not in _cent0:
+                    self._m5phase = "learn"
+                    self._sweep = []
+                    self._probe_done = False
+                    try:
+                        self._probe_samples = {}
+                    except Exception:
+                        pass
+                    return None
+            except Exception:
+                pass
             try:
                 cent = self._centroids(grid)
             except Exception:
@@ -1051,9 +1100,13 @@ class MyAgent(Agent):
             if self._skf_stage == 1:
                 self._skf_fires += 1
                 try:
-                    _hold = 1 if (self._skf_ti % 2 == 0) else 15
+                    _hold = 0 if (self._skf_ti % 2 == 0) else 15
                 except Exception:
                     _hold = 15
+                try:
+                    self._skf_holdmode = _hold
+                except Exception:
+                    pass
                 if self._skf_fires >= _hold:
                     self._skf_stage = 2
                     self._skf_fires = 0
@@ -1166,6 +1219,10 @@ class MyAgent(Agent):
             if not self._expect_reset:
                 self._replay = None
             self._expect_reset = False
+            try:
+                self._att = 0
+            except Exception:
+                pass
             return GameAction.RESET
         try:
             raw = list(latest_frame.available_actions) if latest_frame.available_actions is not None else [a for a in GameAction if a is not GameAction.RESET]
