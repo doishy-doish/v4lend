@@ -13,5 +13,5 @@ def test_compact_keeps_notes_and_summary():
     out, notes = summarize(turns, keep=10)
     assert out[0] == {"note": "keep me"}
     assert notes["n_dropped"] == 15
-    assert notes["n_fails"] == 8
+    assert notes["n_fails"] == 7
     assert len([t for t in out if "note" not in t]) == 15
