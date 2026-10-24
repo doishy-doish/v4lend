@@ -371,7 +371,7 @@ class MyAgent(Agent):
             byname.setdefault(str(a), a)
         if self._m5phase == "learn":
             if not self._sweep and not self._probe_done:
-                self._sweep = list(names) * 3
+                self._sweep = [n for n in names for _ in range(5)]
                 self._probe_done = True
                 try:
                     cent0 = self._centroids(grid)
