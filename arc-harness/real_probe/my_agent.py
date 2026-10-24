@@ -926,11 +926,15 @@ class MyAgent(Agent):
                     self._ls_arr = 1
                 try:
                     _ramdn = getattr(self, "_ls_ram", None)
-                    if int(getattr(self, "_ls_arr", 0)) > 4 and _ramdn is not None:
+                    if int(getattr(self, "_ls_arr", 0)) > 2 and _ramdn is not None:
                         _ramnm = self._nav_arrows.get(_ramdn)
                         if _ramnm is not None and _ramnm in byname:
                             self._act_use[_ramnm] += 1
                             self._record_choice(h, (_ramnm, -1, -1))
+                            try:
+                                self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": "ram:" + str(_ramdn)}
+                            except Exception:
+                                pass
                             if int(getattr(self, "_ls_arr", 0)) > 7:
                                 try:
                                     _btc3 = int(tc) if tc is not None else -1
@@ -1100,6 +1104,8 @@ class MyAgent(Agent):
         try:
             if int(self._best_lc) != int(getattr(self, "_bfs_level", -1)):
                 self._bfs_level = int(self._best_lc)
+                self._strip_moves = {}
+                self._strip_used = set()
                 self._csweep = None
                 self._csweep_all = []
                 self._cbest = None
@@ -1161,6 +1167,24 @@ class MyAgent(Agent):
                 self._ctop = self._ctop[:6]
                 if _dg > 50 and self._cpending[1] not in self._gate_clicks:
                     self._gate_clicks.append(self._cpending[1])
+            except Exception:
+                pass
+            try:
+                _sm = getattr(self, "_strip_moves", None)
+                if _sm is None:
+                    self._strip_moves = {}
+                    _sm = self._strip_moves
+                if grid is not None and self._cpre_grid is not None and self._cpending is not None:
+                    from collections import Counter as _SC
+                    _s3a = _SC()
+                    for _yy in range(SK48_STRIP_Y, len(self._cpre_grid)):
+                        _s3a.update(self._cpre_grid[_yy])
+                    _s3b = _SC()
+                    for _yy in range(SK48_STRIP_Y, len(grid)):
+                        _s3b.update(grid[_yy])
+                    _drain = max(0, list(_s3a.values())[0] - _s3b.get(list(_s3a.keys())[0], 0)) if _s3a else 0
+                    _pos = self._cpending[1]
+                    _sm[_pos] = _sm.get(_pos, 0) + _drain
             except Exception:
                 pass
             self._cpending = None
@@ -1284,6 +1308,29 @@ class MyAgent(Agent):
                 except Exception:
                     pass
                 return GameAction.RESET
+            try:
+                _sm2 = sorted(((v, k) for k, v in getattr(self, "_strip_moves", {}).items() if v > 0), reverse=True)
+            except Exception:
+                _sm2 = []
+            _used = getattr(self, "_strip_used", None)
+            if _used is None:
+                self._strip_used = set()
+                _used = self._strip_used
+            for _vv, _mp in _sm2:
+                if tuple(_mp) in _used:
+                    continue
+                _used.add(tuple(_mp))
+                _ma = six[0]
+                try:
+                    _ma.set_data({"x": _mp[0], "y": _mp[1]})
+                except Exception:
+                    continue
+                _mnm = str(_ma)
+                self._act_use[_mnm] += 1
+                self._sk_clicks += 1
+                self._need_reset = True
+                self._record_choice(h, (_mnm, _mp[0], _mp[1]))
+                return _ma
             px, py = self._cbest
             a = six[0]
             try:
@@ -1479,6 +1526,20 @@ class MyAgent(Agent):
                     self._skf_fires = 0
                     self._skf_stag = 0
                     return None
+                if _tip >= _tx - 6 and six:
+                    self._skf_stage = 2
+                    self._skf_fires = 0
+                    _ae = six[0]
+                    try:
+                        _ae.set_data({"x": _tx, "y": _ty})
+                    except Exception:
+                        _ae = None
+                    if _ae is not None:
+                        _nme = str(_ae)
+                        self._act_use[_nme] += 1
+                        self._sk_clicks += 1
+                        self._record_choice(h, (_nme, _tx, _ty))
+                        return _ae
                 if "GameAction.ACTION4" in byname:
                     self._skf_fires += 1
                     self._sk_clicks += 1
