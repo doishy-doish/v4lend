@@ -89,6 +89,15 @@ def _canon(grid):
     return best
 
 
+def _coerce(a):
+    if isinstance(a, GameAction):
+        return a
+    try:
+        return GameAction(a)
+    except Exception:
+        return None
+
+
 def _complex(a):
     try:
         return bool(a.is_complex())
@@ -119,7 +128,8 @@ class MyAgent(Agent):
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
             return GameAction.RESET
         try:
-            avail = list(latest_frame.available_actions) if latest_frame.available_actions is not None else [a for a in GameAction if a is not GameAction.RESET]
+            raw = list(latest_frame.available_actions) if latest_frame.available_actions is not None else [a for a in GameAction if a is not GameAction.RESET]
+        avail = [c for c in (_coerce(a) for a in raw) if c is not None]
         except Exception:
             avail = [a for a in GameAction if a is not GameAction.RESET]
         grid = _grid(latest_frame)
