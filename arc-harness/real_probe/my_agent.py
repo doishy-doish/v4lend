@@ -115,12 +115,13 @@ class MyAgent(Agent):
         self._act_use = Counter()
         self._repeats = 0
         self._turns = 0
+        self._debug = {}
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
 
     def stats(self):
-        return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited), "act_use": dict(self._act_use), "frame_keys": self._frame_keys}
+        return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited), "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug}
 
     def choose_action(self, frames, latest_frame):
         if self._frame_keys is None:
@@ -133,6 +134,20 @@ class MyAgent(Agent):
         except Exception:
             avail = [a for a in GameAction if a is not GameAction.RESET]
         grid = _grid(latest_frame)
+        if not self._debug:
+            try:
+                raw_dbg = list(latest_frame.available_actions) if latest_frame.available_actions is not None else None
+            except Exception as ex:
+                raw_dbg = "ERR:" + str(ex)[:80]
+            try:
+                fobj = latest_frame.frame() if callable(getattr(latest_frame, "frame", None)) else latest_frame.frame
+                ftype = type(fobj).__name__
+                fshape = getattr(fobj, "shape", None)
+                fshape = str(fshape) if fshape is not None else (str(len(fobj)) + "x" + str(len(fobj[0])) if fobj else None)
+            except Exception as ex:
+                ftype = "ERR:" + str(ex)[:80]
+                fshape = None
+            self._debug = {"avail": str(raw_dbg)[:300], "frame_type": ftype, "frame_shape": fshape}
         h = None
         try:
             h = _canon(grid) if grid else None
