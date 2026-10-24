@@ -369,6 +369,8 @@ class MyAgent(Agent):
         self._bfs_turns = 0
         self._bfs_win = None
         self._bfs_lc0 = 0
+        self._bfs_lastc = None
+        self._bfs_runlen = 0
         self._bfs_level = -1
         self._nspiral_done = False
         self._nav_bg = 0
@@ -968,6 +970,19 @@ class MyAgent(Agent):
                 if best_q is None or q < best_q - 0.01 or (abs(q - best_q) < 0.01 and self._act_use[nm] < self._act_use[best_a]):
                     best_q, best_a, best_dn = q, nm, dn
             try:
+                if tgt is not None:
+                    _rd = _route_step(grid, cy, cx, tgt[0], tgt[1], self._nav_arrows)
+                    if _rd is not None:
+                        _rnm = self._nav_arrows.get(_rd)
+                        if _rnm is not None and _rnm in byname:
+                            best_a, best_dn = _rnm, _rd
+                            try:
+                                self._nav_last = {"routed": _rd}
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            try:
                 _lp = getattr(self, "_ls_pos", None)
                 if _lp is not None and abs(cy - _lp[0]) < 0.01 and abs(cx - _lp[1]) < 0.01:
                     self._ls_pos_stall = int(getattr(self, "_ls_pos_stall", 0)) + 1
@@ -1117,6 +1132,7 @@ class MyAgent(Agent):
                 return None
             self._cexploit_n += 1
             if self._gate_clicks and not getattr(self, "_nspiral_done", False) and self._cexploit_n >= 2:
+                _nspiral_gate_extend = True
                 try:
                     self._nspiral_done = True
                     _nbrs = []
@@ -1126,6 +1142,12 @@ class MyAgent(Agent):
                             _nbrs.append((_nx, _ny))
                     self._csweep = _nbrs + list(self._csweep_all or [])
                     self._need_reset = True
+                    try:
+                        for _t in (self._ctop or [])[:4]:
+                            if _t[0] >= 2 and list(_t[1]) not in self._gate_clicks:
+                                self._gate_clicks.append(list(_t[1]))
+                    except Exception:
+                        pass
                 except Exception:
                     pass
             if self._gate_clicks and self._cexploit_n >= 6:
@@ -1167,6 +1189,15 @@ class MyAgent(Agent):
                             self._act_use[_nm] += 1
                             self._sk_clicks += 1
                             self._record_choice(h, (_nm, _px, _py))
+                            try:
+                                _lk = (_px, _py)
+                                if getattr(self, "_bfs_lastc", None) == _lk:
+                                    self._bfs_runlen = int(getattr(self, "_bfs_runlen", 0)) + 1
+                                else:
+                                    self._bfs_lastc = _lk
+                                    self._bfs_runlen = 1
+                            except Exception:
+                                pass
                             self._bfs_j += 1
                             self._bfs_turns += 1
                             return _a
@@ -1174,7 +1205,9 @@ class MyAgent(Agent):
                             self._bfs_win = list(_seq)
                         _gid = self._gate_id(grid)
                         try:
-                            _gkey = (_gid, int(getattr(self, "_gpar", 0)))
+                            _lc0 = self._bfs_lastc if hasattr(self, "_bfs_lastc") else None
+                            _rl = int(getattr(self, "_bfs_runlen", 0))
+                            _gkey = (_gid, int(getattr(self, "_gpar", 0)), _lc0, _rl)
                         except Exception:
                             _gkey = None
                         if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 7:
@@ -1342,16 +1375,6 @@ class MyAgent(Agent):
             if nm is not None:
                 return None
         if self._skf_phase == "fire":
-            try:
-                _bth = [0.0, 0.25, 0.5, 0.75][self._skf_ti % 4]
-            except Exception:
-                _bth = 0.0
-            try:
-                self._skf_bth = _bth
-            except Exception:
-                pass
-            if self._skf_stage == 0 and self._barfill < _bth:
-                return None
             try:
                 _tip = 0
                 for _yy in range(max(0, cy - 2), min(len(grid), cy + 3)):
