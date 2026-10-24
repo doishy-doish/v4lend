@@ -279,6 +279,7 @@ class MyAgent(Agent):
         self._skf_fires = 0
         self._skf_tip = 0
         self._skf_stag = 0
+        self._skf_stage = 0
         self._probe_last = None
         self._probe_done = False
         self._probe_samples = {}
@@ -335,6 +336,7 @@ class MyAgent(Agent):
                 "nav_avoid": sorted(self._nav_avoid),
                 "nav_steps": {k: [round(float(v[0]), 2), round(float(v[1]), 2)] for k, v in self._nav_steps.items()},
                 "sk_mode": self._skf_phase, "sk_ti": self._skf_ti, "sk_tip": self._skf_tip,
+                "sk_stage": self._skf_stage, "sk_fires": self._skf_fires,
                 "ctop": [[int(s), list(p)] for s, p in self._ctop[:4]],
                 "bfs": [len(self._bfs_queue), self._bfs_i, len(self._bfs_seen), self._bfs_win],
                 "sk_trace": self._sk_trace,
@@ -642,13 +644,12 @@ class MyAgent(Agent):
         return None
     def _gate_id(self, grid):
         try:
-            m = set() if not self._mask else set(self._mask)
             sub = [list(row) for row in grid[1:44]]
-            mm = set()
-            for (y, x) in m:
-                if 1 <= y < 44:
-                    mm.add((y - 1, x))
-            return _canon_masked(sub, mm)
+            if self._mask:
+                for (y, x) in self._mask:
+                    if 1 <= y < 44 and x < len(sub[0]):
+                        sub[y - 1][x] = -1
+            return tuple(tuple(r) for r in sub)
         except Exception:
             return None
 
@@ -848,6 +849,7 @@ class MyAgent(Agent):
             self._skf_phase = "aim"
             self._skf_fires = 0
             self._skf_stag = 0
+            self._skf_stage = 0
         try:
             blocks = _sk_blocks(grid)
         except Exception:
@@ -876,6 +878,7 @@ class MyAgent(Agent):
                 self._skf_fires = 0
                 self._skf_stag = 0
                 self._skf_tip = 0
+                self._skf_stage = 0
                 nm = None
             if nm is not None and nm in byname:
                 self._act_use[nm] += 1
@@ -891,26 +894,89 @@ class MyAgent(Agent):
                     for _xx in range(len(_row)):
                         if _row[_xx] == 1 and _xx > _tip:
                             _tip = _xx
+            except Exception:
+                _tip = self._skf_tip
+            try:
+                _contact = _tip >= _tx - 2
+            except Exception:
+                _contact = False
+            self._sk_target = tc
+            if self._skf_stage == 0:
                 if _tip > self._skf_tip:
                     self._skf_tip = _tip
                     self._skf_stag = 0
                 else:
                     self._skf_stag += 1
-            except Exception:
-                pass
-            self._sk_target = tc
-            if self._skf_fires >= 12 or self._skf_stag >= 3:
+                if _contact:
+                    self._skf_stage = 1
+                    self._skf_fires = 0
+                elif self._skf_fires >= 12 or self._skf_stag >= 6:
+                    self._skf_ti += 1
+                    self._skf_phase = "aim"
+                    self._skf_fires = 0
+                    self._skf_stag = 0
+                    return None
+                if "GameAction.ACTION4" in byname:
+                    self._skf_fires += 1
+                    self._sk_clicks += 1
+                    self._record_choice(h, ("GameAction.ACTION4", -1, -1))
+                    return byname["GameAction.ACTION4"]
+                return None
+            if self._skf_stage == 1:
+                self._skf_fires += 1
+                if self._skf_fires >= 15:
+                    self._skf_stage = 2
+                    self._skf_fires = 0
+                if "GameAction.ACTION4" in byname:
+                    self._sk_clicks += 1
+                    self._record_choice(h, ("GameAction.ACTION4", -1, -1))
+                    return byname["GameAction.ACTION4"]
+                return None
+            if self._skf_stage == 2:
+                self._skf_fires += 1
+                _nm2 = "GameAction.ACTION7" if self._skf_fires <= 2 else None
+                if self._skf_fires == 3:
+                    _nm2 = "clickblock"
+                if self._skf_fires >= 4:
+                    self._skf_stage = 3
+                    self._skf_fires = 0
+                    return None
+                if _nm2 == "clickblock" and six:
+                    _a = six[0]
+                    try:
+                        _a.set_data({"x": _tx, "y": _ty})
+                    except Exception:
+                        return None
+                    _nmc = str(_a)
+                    self._act_use[_nmc] += 1
+                    self._sk_clicks += 1
+                    self._record_choice(h, (_nmc, _tx, _ty))
+                    return _a
+                if _nm2 in byname:
+                    self._act_use[_nm2] += 1
+                    self._record_choice(h, (_nm2, -1, -1))
+                    return byname[_nm2]
+                self._skf_stage = 3
+                self._skf_fires = 0
+                return None
+            if self._skf_stage == 3:
+                self._skf_fires += 1
+                if _tip <= 8 or self._skf_fires >= 6:
+                    self._skf_ti += 1
+                    self._skf_phase = "aim"
+                    self._skf_fires = 0
+                    self._skf_stag = 0
+                    self._skf_stage = 0
+                    return None
+                if "GameAction.ACTION7" in byname:
+                    self._act_use["GameAction.ACTION7"] += 1
+                    self._record_choice(h, ("GameAction.ACTION7", -1, -1))
+                    return byname["GameAction.ACTION7"]
                 self._skf_ti += 1
                 self._skf_phase = "aim"
+                self._skf_stage = 0
                 self._skf_fires = 0
-                self._skf_stag = 0
                 return None
-            if "GameAction.ACTION4" in byname:
-                self._skf_fires += 1
-                self._sk_clicks += 1
-                self._record_choice(h, ("GameAction.ACTION4", -1, -1))
-                return byname["GameAction.ACTION4"]
-            return None
         return None
 
     def _replay_pick(self, cands, h):
