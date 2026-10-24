@@ -516,6 +516,15 @@ class MyAgent(Agent):
                 d["fh"] = zlib.crc32(str(grid).encode()) & 0xffff
             except Exception:
                 pass
+            try:
+                _nl = getattr(self, "_nav_last", None)
+                if isinstance(_nl, dict):
+                    if "bestd" in _nl:
+                        d["bd"] = _nl["bestd"]
+                    if "routed" in _nl:
+                        d["rt"] = _nl["routed"]
+            except Exception:
+                pass
         else:
             try:
                 cent = self._centroids(grid)
@@ -1132,7 +1141,7 @@ class MyAgent(Agent):
             try:
                 _dg = 0
                 if grid is not None and self._cpre_grid is not None and len(grid) == len(self._cpre_grid):
-                    _top = min(len(grid), SK48_STRIP_Y)
+                    _top = len(grid)
                     for _yy in range(_top):
                         _ra, _rb = grid[_yy], self._cpre_grid[_yy]
                         for _xx in range(min(len(_ra), len(_rb))):
@@ -1441,18 +1450,10 @@ class MyAgent(Agent):
                     self._skf_stag += 1
                 if _contact:
                     try:
-                        _ci = int(getattr(self, "_skf_combo", 0)) % 3
-                    except Exception:
-                        _ci = 0
-                    try:
-                        self._skf_combo = int(getattr(self, "_skf_combo", 0)) + 1
-                    except Exception:
-                        self._skf_combo = 1
-                    try:
-                        self._skf_cc = _ci
+                        self._skf_cc = 0
                     except Exception:
                         pass
-                    if _ci == 0 and six:
+                    if six:
                         self._skf_stage = 2
                         self._skf_fires = 0
                         try:
@@ -1470,14 +1471,6 @@ class MyAgent(Agent):
                             self._sk_clicks += 1
                             self._record_choice(h, (_nmc0, _tx, _ty))
                             return _a0
-                    elif _ci in (1, 2, 3):
-                        self._skf_stage = 4
-                        self._skf_fires = 0
-                        try:
-                            self._skf_fv = _ci
-                        except Exception:
-                            pass
-                        return None
                     self._skf_stage = 1
                     self._skf_fires = 0
                 elif self._skf_fires >= 12 or self._skf_stag >= 6:
