@@ -129,7 +129,7 @@ class MyAgent(Agent):
             return GameAction.RESET
         try:
             raw = list(latest_frame.available_actions) if latest_frame.available_actions is not None else [a for a in GameAction if a is not GameAction.RESET]
-        avail = [c for c in (_coerce(a) for a in raw) if c is not None]
+            avail = [c for c in (_coerce(a) for a in raw) if c is not None]
         except Exception:
             avail = [a for a in GameAction if a is not GameAction.RESET]
         grid = _grid(latest_frame)
