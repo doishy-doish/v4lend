@@ -15,4 +15,4 @@ jobs:
           echo CPU_COUNT=$(nproc)
           grep MemTotal /proc/meminfo
       - run: pip install -q pytest
-      - run: cd arc-harness && python3 -m pytest test_baseline.py -q
+      - run: cd arc-harness && python3 -m pytest -q
