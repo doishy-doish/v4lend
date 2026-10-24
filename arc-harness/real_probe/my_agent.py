@@ -15,6 +15,8 @@ def _grid(latest_frame):
     try:
         if hasattr(g, "tolist"):
             g = g.tolist()
+        if g and isinstance(g, list) and g and isinstance(g[0], list) and g[0] and isinstance(g[0][0], list):
+            g = g[0]
         g = [list(map(int, row)) for row in g]
         if not g or not g[0]:
             return None
@@ -92,6 +94,12 @@ def _canon(grid):
 def _coerce(a):
     if isinstance(a, GameAction):
         return a
+    try:
+        byval = {m.value: m for m in GameAction}
+    except Exception:
+        byval = {}
+    if a in byval:
+        return byval[a]
     try:
         return GameAction(a)
     except Exception:
