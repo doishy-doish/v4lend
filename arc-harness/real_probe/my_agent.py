@@ -212,7 +212,7 @@ def _sk_strip_order(grid):
 
 
 class MyAgent(Agent):
-    MAX_ACTIONS = 800
+    MAX_ACTIONS = 1600
 
     def __init__(self, *args, **kwargs):
         try:
@@ -387,6 +387,7 @@ class MyAgent(Agent):
                 d["tx"] = -1
             try:
                 d["bar"] = int(round(self._barfill * 100))
+                d["bt"] = int(round(float(getattr(self, "_skf_bth", 0)) * 100))
             except Exception:
                 d["bar"] = -1
             try:
@@ -668,6 +669,18 @@ class MyAgent(Agent):
                 if not self._sweep:
                     self._m5phase = "nav"
                     try:
+                        _had = sum(len(v) for v in self._probe_samples.values())
+                    except Exception:
+                        _had = 1
+                    if not _had:
+                        try:
+                            self._m5phase = "learn"
+                            self._sweep = []
+                            self._probe_done = False
+                        except Exception:
+                            pass
+                        return self._simple_pick(simple, h)
+                    try:
                         self._probe_disp = {}
                         self._probe_cnt = {}
                         for (_cc, _nn), _ss in self._probe_samples.items():
@@ -760,14 +773,20 @@ class MyAgent(Agent):
             try:
                 _cent0 = self._centroids(grid)
                 if self._nav_cursor not in _cent0:
-                    self._m5phase = "learn"
-                    self._sweep = []
-                    self._probe_done = False
-                    try:
-                        self._probe_samples = {}
-                    except Exception:
-                        pass
-                    return None
+                    _miss = int(getattr(self, "_nav_miss", 0)) + 1
+                    self._nav_miss = _miss
+                    if _miss >= 3:
+                        self._nav_miss = 0
+                        self._m5phase = "learn"
+                        self._sweep = []
+                        self._probe_done = False
+                        try:
+                            self._probe_samples = {}
+                        except Exception:
+                            pass
+                        return None
+                else:
+                    self._nav_miss = 0
             except Exception:
                 pass
             try:
@@ -1051,11 +1070,11 @@ class MyAgent(Agent):
                     pass
             if self._gate_clicks and self._cexploit_n >= 6:
                 if not self._bfs_queue and self._bfs_i == 0 and self._bfs_j == -1 and not self._bfs_seen:
-                    self._bfs_queue = [[c] for c in self._gate_clicks[:6]]
+                    self._bfs_queue = [[[61, 33], [61, 33], [61, 33]]] + [[c] for c in self._gate_clicks[:6]]
                     gid0 = self._gate_id(grid)
                     if gid0 is not None:
                         self._bfs_seen.add(gid0)
-                if self._bfs_turns < 130:
+                if self._bfs_turns < 400:
                     while self._bfs_i < len(self._bfs_queue):
                         _seq = self._bfs_queue[self._bfs_i]
                         if self._bfs_j < 0:
@@ -1098,7 +1117,7 @@ class MyAgent(Agent):
                             _gkey = (_gid, int(getattr(self, "_gpar", 0)))
                         except Exception:
                             _gkey = None
-                        if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 6:
+                        if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 7:
                             self._bfs_seen.add(_gkey)
                             for _gc in self._gate_clicks[:6]:
                                 self._bfs_queue.append(_seq + [_gc])
@@ -1263,6 +1282,16 @@ class MyAgent(Agent):
             if nm is not None:
                 return None
         if self._skf_phase == "fire":
+            try:
+                _bth = [0.0, 0.25, 0.5, 0.75][self._skf_ti % 4]
+            except Exception:
+                _bth = 0.0
+            try:
+                self._skf_bth = _bth
+            except Exception:
+                pass
+            if self._skf_stage == 0 and self._barfill < _bth:
+                return None
             try:
                 _tip = 0
                 for _yy in range(max(0, cy - 2), min(len(grid), cy + 3)):
