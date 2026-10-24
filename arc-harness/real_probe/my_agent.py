@@ -2,9 +2,16 @@ import random
 from collections import Counter
 
 from arcengine import FrameData, GameAction, GameState
-from agents.agent import Agent
+
+try:
+    from agents.agent import Agent
+except Exception:
+    Agent = object
 
 SALIENT = set(range(6, 16))
+
+STALL_FORCE_SIMPLE = 8
+STALL_ROTATE = 3
 
 
 def _grid(latest_frame):
@@ -70,7 +77,7 @@ def _targets(grid):
             continue
         y1, x1, y2, x2 = s["bbox"]
         out.append(((y1 + y2) // 2, (x1 + x2) // 2))
-        if len(out) >= 32:
+        if len(out) >= 64:
             break
     return out
 
@@ -117,23 +124,55 @@ class MyAgent(Agent):
     MAX_ACTIONS = 200
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        try:
+            super().__init__(*args, **kwargs)
+        except Exception:
+            pass
         self._frame_keys = None
         self._visited = Counter()
         self._act_use = Counter()
         self._repeats = 0
         self._turns = 0
         self._debug = {}
+        self._pair_seen = set()
+        self._target_use = Counter()
+        self._noop_count = Counter()
+        self._simple_idx = 0
+        self._last_h = None
+        self._stall = 0
+        self._prev_h = None
+        self._prev_sig = None
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
 
     def stats(self):
-        return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited), "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug}
+        return {"turns": self._turns, "repeats": self._repeats, "unique_frames": len(self._visited),
+                "act_use": dict(self._act_use), "frame_keys": self._frame_keys, "debug": self._debug,
+                "target_use": dict(self._target_use), "noop": dict(self._noop_count),
+                "pairs_tried": len(self._pair_seen)}
+
+    def _simple_pick(self, simple):
+        if not simple:
+            return GameAction.RESET
+        names = sorted(set(str(a) for a in simple))
+        name = names[self._simple_idx % len(names)]
+        self._simple_idx += 1
+        for a in simple:
+            if str(a) == name:
+                self._act_use[str(a)] += 1
+                self._prev_sig = (str(a), -1, -1)
+                return a
+        a = simple[0]
+        self._act_use[str(a)] += 1
+        return a
 
     def choose_action(self, frames, latest_frame):
         if self._frame_keys is None:
-            self._frame_keys = sorted([x for x in dir(latest_frame) if not x.startswith("_")])
+            try:
+                self._frame_keys = sorted([x for x in dir(latest_frame) if not x.startswith("_")])
+            except Exception:
+                self._frame_keys = []
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
             return GameAction.RESET
         try:
@@ -156,27 +195,6 @@ class MyAgent(Agent):
                 ftype = "ERR:" + str(ex)[:80]
                 fshape = None
             self._debug = {"avail": str(raw_dbg)[:300], "frame_type": ftype, "frame_shape": fshape}
-            try:
-                members = [(m.name, m.value) for m in GameAction]
-            except Exception as ex:
-                members = "ERR:" + str(ex)[:80]
-            coerced = []
-            for v in (raw_dbg if isinstance(raw_dbg, list) else []):
-                try:
-                    coerced.append(GameAction(v).name)
-                except Exception as ex:
-                    coerced.append("FAIL:" + str(ex)[:60])
-            try:
-                fr = fobj
-                dims = []
-                while isinstance(fr, list):
-                    dims.append(len(fr))
-                    fr = fr[0] if fr else None
-                sample = str(fobj)[:200]
-            except Exception as ex:
-                dims = "ERR:" + str(ex)[:80]
-                sample = ""
-            self._debug.update({"members": str(members)[:300], "coerced": str(coerced)[:300], "dims": str(dims), "sample": sample})
         h = None
         try:
             h = _canon(grid) if grid else None
@@ -186,28 +204,60 @@ class MyAgent(Agent):
             if h in self._visited:
                 self._repeats += 1
             self._visited[h] += 1
+        if self._prev_sig is not None and self._prev_h is not None and h is not None:
+            if h == self._prev_h:
+                self._noop_count[self._prev_sig[0]] += 1
+        if h is not None:
+            if h == self._last_h:
+                self._stall += 1
+            else:
+                self._stall = 0
+            self._last_h = h
         self._turns += 1
         cands = [a for a in avail if a is not GameAction.RESET]
-        if grid:
-            six = [a for a in cands if _complex(a)]
+        simple = [a for a in cands if not _complex(a)]
+        six = [a for a in cands if _complex(a)]
+        if self._stall >= STALL_FORCE_SIMPLE and simple:
+            self._prev_h = h
+            return self._simple_pick(simple)
+        if grid and six:
             try:
                 tg = _targets(grid)
             except Exception:
                 tg = []
-            if six and tg:
-                y, x = tg[0]
-                a = six[0]
-                try:
-                    a.set_data({"x": x, "y": y})
-                    self._act_use["ACTION6"] += 1
-                    return a
-                except Exception:
-                    pass
-        simple = [a for a in cands if not _complex(a)] or cands
-        if not simple:
-            return GameAction.RESET
-        best = min([str(a) for a in simple], key=lambda s: self._act_use[s])
-        pick = [a for a in simple if str(a) == best]
-        a = random.choice(pick)
-        self._act_use[str(a)] += 1
-        return a
+            if tg:
+                if self._stall >= STALL_ROTATE:
+                    tg = tg[1:] + tg[:1]
+                scored = []
+                for (y, x) in tg:
+                    tu = self._target_use[(y, x)]
+                    for a in six:
+                        nm = str(a)
+                        if h is not None and (h, nm, x, y) in self._pair_seen:
+                            continue
+                        scored.append((tu + self._noop_count.get(nm, 0) * 10, self._act_use[nm], (y, x), a))
+                if scored:
+                    scored.sort(key=lambda t: (t[0], t[1]))
+                    _, _, (y, x), a = scored[0]
+                    try:
+                        a.set_data({"x": x, "y": y})
+                        nm = str(a)
+                        if h is not None:
+                            self._pair_seen.add((h, nm, x, y))
+                        self._act_use[nm] += 1
+                        self._target_use[(y, x)] += 1
+                        self._prev_h = h
+                        self._prev_sig = (nm, x, y)
+                        return a
+                    except Exception:
+                        pass
+        if simple:
+            self._prev_h = h
+            return self._simple_pick(simple)
+        if cands:
+            a = cands[0]
+            self._act_use[str(a)] += 1
+            self._prev_h = h
+            self._prev_sig = (str(a), -1, -1)
+            return a
+        return GameAction.RESET
