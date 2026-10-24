@@ -212,7 +212,7 @@ def _sk_strip_order(grid):
 
 
 class MyAgent(Agent):
-    MAX_ACTIONS = 200
+    MAX_ACTIONS = 400
 
     def __init__(self, *args, **kwargs):
         try:
@@ -391,6 +391,10 @@ class MyAgent(Agent):
                 d["st"] = int(self._skf_stage)
                 d["fv"] = int(getattr(self, "_skf_fv", -1))
                 try:
+                    d["hits"] = int(getattr(self, "_skf_hits", 0))
+                except Exception:
+                    pass
+                try:
                     d["cc"] = int(getattr(self, "_skf_cc", -1))
                 except Exception:
                     pass
@@ -451,6 +455,12 @@ class MyAgent(Agent):
             try:
                 if self._nav_last:
                     d["nl"] = self._nav_last
+            except Exception:
+                pass
+            try:
+                if self._turns % 15 == 0:
+                    _segs = sorted(_segments(grid), key=lambda _x: -_x["area"])[:8]
+                    d["segs"] = [[int(_g["color"]), int(_g["area"]), list(_g["bbox"])] for _g in _segs]
             except Exception:
                 pass
         return d
@@ -865,6 +875,16 @@ class MyAgent(Agent):
                     self._nav_same_dir = 0
                     self._nav_last_dir = best_dn
                 try:
+                    if int(getattr(self, "_nav_same_dir", 0)) >= 8:
+                        self._nav_same_dir = 0
+                        _btc2 = int(tc) if tc is not None else -1
+                        if _btc2 >= 0:
+                            self._nav_dead.add(_btc2)
+                            self._nav_last = None
+                            self._ls_prevd = None
+                except Exception:
+                    pass
+                try:
                     self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": best_dn, "same": self._nav_same_dir}
                 except Exception:
                     pass
@@ -969,7 +989,7 @@ class MyAgent(Agent):
             if self._cbest is None:
                 return None
             self._cexploit_n += 1
-            if self._gate_clicks and self._cexploit_n >= 10:
+            if self._gate_clicks and self._cexploit_n >= 6:
                 if not self._bfs_queue and self._bfs_i == 0 and self._bfs_j == -1 and not self._bfs_seen:
                     self._bfs_queue = [[c] for c in self._gate_clicks[:6]]
                     gid0 = self._gate_id(grid)
@@ -1307,7 +1327,12 @@ class MyAgent(Agent):
                         self._record_choice(h, (_nmc4, _tx, _ty))
                         return _a4
                 if self._skf_fires >= 3:
-                    self._skf_ti += 1
+                    try:
+                        self._skf_hits = int(getattr(self, "_skf_hits", 0)) + 1
+                    except Exception:
+                        self._skf_hits = 1
+                    if int(getattr(self, "_skf_hits", 1)) % 3 == 0:
+                        self._skf_ti += 1
                     self._skf_phase = "aim"
                     self._skf_stage = 0
                     self._skf_fires = 0
@@ -1316,7 +1341,12 @@ class MyAgent(Agent):
             if self._skf_stage == 3:
                 self._skf_fires += 1
                 if _tip <= 8 or self._skf_fires >= 6:
-                    self._skf_ti += 1
+                    try:
+                        self._skf_hits = int(getattr(self, "_skf_hits", 0)) + 1
+                    except Exception:
+                        self._skf_hits = 1
+                    if int(getattr(self, "_skf_hits", 1)) % 3 == 0:
+                        self._skf_ti += 1
                     self._skf_phase = "aim"
                     self._skf_fires = 0
                     self._skf_stag = 0
