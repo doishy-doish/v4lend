@@ -410,8 +410,7 @@ class MyAgent(Agent):
             except Exception:
                 d["tby"] = -1
             try:
-                if self._turns % 10 == 0:
-                    d["ord"] = [int(_c) for _c in _sk_strip_order(grid)]
+                d["ord"] = [int(_c) for _c in _sk_strip_order(grid)][:8]
             except Exception:
                 pass
         elif not self._simple_only:
@@ -461,6 +460,18 @@ class MyAgent(Agent):
                 if self._turns % 15 == 0:
                     _segs = sorted(_segments(grid), key=lambda _x: -_x["area"])[:8]
                     d["segs"] = [[int(_g["color"]), int(_g["area"]), list(_g["bbox"])] for _g in _segs]
+                if self._turns % 10 == 0:
+                    try:
+                        _cc0 = self._centroids(grid)
+                        _cu = self._nav_cursor if self._nav_cursor in _cc0 else None
+                        if _cu is not None:
+                            _wcy, _wcx = int(round(_cc0[_cu][0])), int(round(_cc0[_cu][1]))
+                            _rows = []
+                            for _wy in range(max(0, _wcy - 5), min(len(grid), _wcy + 6)):
+                                _rows.append("".join("X" if grid[_wy][_wx] not in (4,) else "." for _wx in range(max(0, _wcx - 5), min(len(grid[0]), _wcx + 6))))
+                            d["win"] = [int(_wcy), int(_wcx), _rows]
+                    except Exception:
+                        pass
             except Exception:
                 pass
         return d
@@ -1028,7 +1039,7 @@ class MyAgent(Agent):
                             _gkey = (_gid, int(getattr(self, "_gpar", 0)))
                         except Exception:
                             _gkey = None
-                        if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 5:
+                        if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 6:
                             self._bfs_seen.add(_gkey)
                             for _gc in self._gate_clicks[:6]:
                                 self._bfs_queue.append(_seq + [_gc])
@@ -1195,7 +1206,7 @@ class MyAgent(Agent):
                     self._skf_stag += 1
                 if _contact:
                     try:
-                        _ci = int(getattr(self, "_skf_combo", 0)) % 5
+                        _ci = int(getattr(self, "_skf_combo", 0)) % 3
                     except Exception:
                         _ci = 0
                     try:
@@ -1306,7 +1317,7 @@ class MyAgent(Agent):
                 except Exception:
                     _cc = 1
                 if self._skf_fires == 1:
-                    _mv = "GameAction.ACTION7" if _cc == 1 else ("GameAction.ACTION1" if _cc == 2 else "GameAction.ACTION2")
+                    _mv = "GameAction.ACTION7"
                     if _mv in byname:
                         self._act_use[_mv] += 1
                         self._record_choice(h, (_mv, -1, -1))
