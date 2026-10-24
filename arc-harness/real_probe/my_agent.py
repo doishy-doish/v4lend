@@ -272,6 +272,7 @@ class MyAgent(Agent):
         self._combo_eval = 0
         self._combo_win = None
         self._simple_only = False
+        self._sk_trace = []
         self._skf_phase = "aim"
         self._skf_order = None
         self._skf_ti = 0
@@ -336,6 +337,7 @@ class MyAgent(Agent):
                 "sk_mode": self._skf_phase, "sk_ti": self._skf_ti, "sk_tip": self._skf_tip,
                 "ctop": [[int(s), list(p)] for s, p in self._ctop[:4]],
                 "bfs": [len(self._bfs_queue), self._bfs_i, len(self._bfs_seen), self._bfs_win],
+                "sk_trace": self._sk_trace,
                 "combo_win": self._combo_win, "combo_done": self._combo_i,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
@@ -343,6 +345,11 @@ class MyAgent(Agent):
         self._prev_h = h
         self._prev_sig = sig
         self._prefix.append(sig)
+        if len(self._sk_trace) < 120:
+            try:
+                self._sk_trace.append([self._turns, self._skf_phase, str(sig[0])])
+            except Exception:
+                pass
 
     def _simple_pick(self, simple, h):
         if not simple:
@@ -1059,6 +1066,11 @@ class MyAgent(Agent):
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
         self._simple_only = bool(simple) and not six
+        if len(self._sk_trace) < 60:
+            try:
+                self._sk_trace.append([self._turns, self._skf_phase, ",".join(sorted(str(a) for a in simple))])
+            except Exception:
+                pass
         if self._simple_only:
             try:
                 _ch = self._combo_pick(h, simple)
