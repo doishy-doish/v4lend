@@ -309,6 +309,7 @@ class MyAgent(Agent):
         self._bfs_turns = 0
         self._bfs_win = None
         self._bfs_lc0 = 0
+        self._bfs_level = -1
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -825,6 +826,26 @@ class MyAgent(Agent):
                 q = abs((cy + dy) - tgt[0]) + abs((cx + dx) - tgt[1])
                 if best_q is None or q < best_q - 0.01 or (abs(q - best_q) < 0.01 and self._act_use[nm] < self._act_use[best_a]):
                     best_q, best_a, best_dn = q, nm, dn
+            try:
+                _lp = getattr(self, "_ls_pos", None)
+                if _lp is not None and abs(cy - _lp[0]) < 0.01 and abs(cx - _lp[1]) < 0.01:
+                    self._ls_pos_stall = int(getattr(self, "_ls_pos_stall", 0)) + 1
+                else:
+                    self._ls_pos_stall = 0
+                self._ls_pos = (float(cy), float(cx))
+            except Exception:
+                pass
+            try:
+                if int(getattr(self, "_ls_pos_stall", 0)) >= 4:
+                    self._ls_pos_stall = 0
+                    _perp = [nm for dn, nm in self._nav_arrows.items() if dn != best_dn]
+                    for _pnm in sorted(_perp, key=lambda n: self._act_use[n]):
+                        if _pnm in byname:
+                            self._act_use[_pnm] += 1
+                            self._record_choice(h, (_pnm, -1, -1))
+                            return byname[_pnm]
+            except Exception:
+                pass
             if best_a is not None:
                 if best_dn == self._nav_last_dir:
                     self._nav_same_dir += 1
@@ -864,6 +885,27 @@ class MyAgent(Agent):
     def _clickonly_pick(self, grid, h, six):
         if not six:
             return None
+        try:
+            if int(self._best_lc) != int(getattr(self, "_bfs_level", -1)):
+                self._bfs_level = int(self._best_lc)
+                self._csweep = None
+                self._csweep_all = []
+                self._cbest = None
+                self._cbest_score = -1
+                self._cpending = None
+                self._ctop = []
+                self._cexploit_n = 0
+                self._cpair = []
+                self._gate_clicks = []
+                self._bfs_queue = []
+                self._bfs_i = 0
+                self._bfs_j = -1
+                self._bfs_seen = set()
+                self._bfs_turns = 0
+                self._bfs_win = None
+                self._need_reset = True
+        except Exception:
+            pass
         if self._csweep is None:
             pts = []
             try:
@@ -1120,6 +1162,28 @@ class MyAgent(Agent):
                 else:
                     self._skf_stag += 1
                 if _contact:
+                    try:
+                        _fast = (self._skf_ti % 2 == 0)
+                    except Exception:
+                        _fast = False
+                    if _fast and six:
+                        self._skf_stage = 2
+                        self._skf_fires = 0
+                        try:
+                            self._skf_fv = 0
+                        except Exception:
+                            pass
+                        _a0 = six[0]
+                        try:
+                            _a0.set_data({"x": _tx, "y": _ty})
+                        except Exception:
+                            _a0 = None
+                        if _a0 is not None:
+                            _nmc0 = str(_a0)
+                            self._act_use[_nmc0] += 1
+                            self._sk_clicks += 1
+                            self._record_choice(h, (_nmc0, _tx, _ty))
+                            return _a0
                     self._skf_stage = 1
                     self._skf_fires = 0
                 elif self._skf_fires >= 12 or self._skf_stag >= 6:
