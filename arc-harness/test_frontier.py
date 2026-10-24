@@ -17,7 +17,8 @@ def test_low_error_when_explained():
 def test_high_error_when_novel():
     w = DualWorld()
     w.fit(objects([[3]]))
-    err = adequacy.ontology_error(w.simple.rules, [(GRID, [[9]*4, [9]*4])])
+    novel = [[2, 9, 9, 9], [9, 9, 9, 9]]
+    err = adequacy.ontology_error(w.simple.rules, [(GRID, novel)])
     assert err == 1.0
 
 
