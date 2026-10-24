@@ -95,6 +95,11 @@ def _targets(grid):
 
 
 def _canon(grid):
+    try:
+        grid = [list(row) for row in grid[:SK48_STRIP_Y]]
+    except Exception:
+        pass
+
     def rot(g):
         return [list(r) for r in zip(*g[::-1])]
     def flip(g):
@@ -111,6 +116,15 @@ def _canon(grid):
 
 
 def _canon_masked(grid, mask):
+    try:
+        grid = [list(row) for row in grid[:SK48_STRIP_Y]]
+    except Exception:
+        pass
+    if mask:
+        try:
+            mask = set((y, x) for (y, x) in mask if y < SK48_STRIP_Y)
+        except Exception:
+            mask = None
     if mask:
         grid = [[-1 if (y, x) in mask else v for x, v in enumerate(row)] for y, row in enumerate(grid)]
     return _canon(grid)
@@ -256,6 +270,7 @@ class MyAgent(Agent):
         self._probe_done = False
         self._probe_cnt = {}
         self._nav_scores = []
+        self._barfill = 0.0
         self._csweep = None
         self._cbest = None
         self._cbest_score = -1
@@ -283,6 +298,7 @@ class MyAgent(Agent):
                 "nav_cursor": self._nav_cursor, "nav_arrows": dict(self._nav_arrows),
                 "nav_interact": list(self._nav_interact), "cbest": self._cbest,
                 "cbest_score": self._cbest_score, "nav_scores": self._nav_scores,
+                "barfill": self._barfill,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -692,6 +708,19 @@ class MyAgent(Agent):
                 self._stall = 0
             self._last_h = h
         self._turns += 1
+        try:
+            _g2 = 0
+            _r2 = 0
+            if grid is not None:
+                for _yy in range(SK48_STRIP_Y, len(grid)):
+                    for _vv in grid[_yy]:
+                        if _vv == 3:
+                            _g2 += 1
+                        elif _vv == 2:
+                            _r2 += 1
+            self._barfill = round(_g2 / float(_g2 + _r2), 3) if (_g2 + _r2) else 0.0
+        except Exception:
+            pass
         cands = [a for a in avail if a is not GameAction.RESET]
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
