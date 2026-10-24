@@ -268,6 +268,7 @@ class MyAgent(Agent):
         self._probe_pre = None
         self._probe_last = None
         self._probe_done = False
+        self._probe_samples = {}
         self._probe_cnt = {}
         self._nav_avoid = set()
         self._nav_scores = []
@@ -278,6 +279,11 @@ class MyAgent(Agent):
         self._cpending = None
         self._cpre = None
         self._cpre_grid = None
+        self._csweep_all = []
+        self._cexploit_n = 0
+        self._cpair = []
+        self._cpair_i = 0
+        self._cpair_stage = 0
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -305,6 +311,7 @@ class MyAgent(Agent):
                 "cbest_score": self._cbest_score, "nav_scores": self._nav_scores,
                 "barfill": self._barfill, "nav_last": self._nav_last,
                 "nav_avoid": sorted(self._nav_avoid),
+                "nav_steps": {k: [round(float(v[0]), 2), round(float(v[1]), 2)] for k, v in self._nav_steps.items()},
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -357,7 +364,7 @@ class MyAgent(Agent):
             byname.setdefault(str(a), a)
         if self._m5phase == "learn":
             if not self._sweep and not self._probe_done:
-                self._sweep = list(names)
+                self._sweep = list(names) * 3
                 self._probe_done = True
                 try:
                     cent0 = self._centroids(grid)
@@ -377,10 +384,8 @@ class MyAgent(Agent):
                                 v0 = self._probe_pre[c]
                                 d = abs(v1[0] - v0[0]) + abs(v1[1] - v0[1])
                                 if d > 0.05:
-                                    ent = self._probe_disp.setdefault(c, {})
-                                    ent[self._probe_last] = (v1[0] - v0[0], v1[1] - v0[1])
                                     try:
-                                        self._probe_cnt[(c, self._probe_last)] = v1[2]
+                                        self._probe_samples.setdefault((c, self._probe_last), []).append((v1[0] - v0[0], v1[1] - v0[1], v1[2]))
                                     except Exception:
                                         pass
                     except Exception:
@@ -388,6 +393,23 @@ class MyAgent(Agent):
                     self._probe_last = None
                 if not self._sweep:
                     self._m5phase = "nav"
+                    try:
+                        self._probe_disp = {}
+                        self._probe_cnt = {}
+                        for (_cc, _nn), _ss in self._probe_samples.items():
+                            if len(_ss) == 0:
+                                continue
+                            _dys = sorted([_s[0] for _s in _ss])
+                            _dxs = sorted([_s[1] for _s in _ss])
+                            _cts = sorted([_s[2] for _s in _ss])
+                            _mid = len(_ss) // 2
+                            _mdy = (_dys[_mid] + _dys[~_mid]) / 2.0
+                            _mdx = (_dxs[_mid] + _dxs[~_mid]) / 2.0
+                            if abs(_mdy) + abs(_mdx) > 0.05:
+                                self._probe_disp.setdefault(_cc, {})[_nn] = (_mdy, _mdx)
+                                self._probe_cnt[(_cc, _nn)] = _cts[_mid]
+                    except Exception:
+                        pass
                     try:
                         best_c, best_d = None, 0.01
                         _scored = []
@@ -606,6 +628,7 @@ class MyAgent(Agent):
                     seen.add(p)
                     uniq.append(p)
             self._csweep = uniq
+            self._csweep_all = list(uniq)
             self._need_reset = True
         if self._cpending is not None:
             try:
@@ -630,6 +653,38 @@ class MyAgent(Agent):
         if not self._csweep:
             if self._cbest is None:
                 return None
+            self._cexploit_n += 1
+            if self._cpair or (self._cexploit_n >= 25 and self._csweep_all):
+                if not self._cpair:
+                    _short = [p for p in self._csweep_all[:10] if p != self._cbest]
+                    self._cpair = [(self._cbest, p) for p in _short]
+                    self._cpair_i = 0
+                    self._cpair_stage = 0
+                if self._cpair_i < len(self._cpair):
+                    (_ax, _ay), (_bx, _by) = self._cpair[self._cpair_i]
+                    if self._cpair_stage == 0:
+                        self._cpair_stage = 1
+                        self._expect_reset = True
+                        return GameAction.RESET
+                    _px, _py = (_ax, _ay) if self._cpair_stage == 1 else (_bx, _by)
+                    _a = six[0]
+                    try:
+                        _a.set_data({"x": _px, "y": _py})
+                    except Exception:
+                        self._cpair_stage = 0
+                        self._cpair_i += 1
+                        return GameAction.RESET
+                    _nm = str(_a)
+                    self._act_use[_nm] += 1
+                    self._sk_clicks += 1
+                    self._record_choice(h, (_nm, _px, _py))
+                    if self._cpair_stage == 1:
+                        self._cpair_stage = 2
+                    else:
+                        self._cpair_stage = 0
+                        self._cpair_i += 1
+                    return _a
+                self._cpair = []
             if self._need_reset:
                 self._need_reset = False
                 self._expect_reset = True
