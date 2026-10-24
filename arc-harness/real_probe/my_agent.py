@@ -287,9 +287,37 @@ class MyAgent(Agent):
         ty, tx, _ta = blocks[target]
         err = ty - cy
         if abs(err) <= SK48_ALIGN_TOL:
-            a = six[0]
+            sweep = []
+            for py, px in [(ty, tx), (cy, 8), (ty, 8), ((cy + ty) // 2, (8 + tx) // 2)]:
+                for a in six:
+                    nm = str(a)
+                    if h is not None and (h, nm, px, py) in self._pair_seen:
+                        continue
+                    sweep.append((self._act_use[nm], (py, px), a))
+            for nm in sorted(set(str(a) for a in simple)):
+                if h is not None and (h, nm, -1, -1) in self._pair_seen:
+                    continue
+                sweep.append((self._act_use[nm], None, nm))
+            if not sweep:
+                for py, px in [(ty, tx), (cy, 8)]:
+                    for a in six:
+                        sweep.append((self._act_use[str(a)], (py, px), a))
+            sweep.sort(key=lambda t: t[0])
+            _u, pt, pick = sweep[0]
+            if pt is None:
+                for a in simple:
+                    if str(a) == pick:
+                        if h is not None:
+                            self._pair_seen.add((h, pick, -1, -1))
+                        self._act_use[pick] += 1
+                        self._sk_clicks += 1
+                        self._record_choice(h, (pick, -1, -1))
+                        return a
+                return self._simple_pick(simple, h)
+            py, px = pt
+            a = pick
             try:
-                a.set_data({"x": tx, "y": ty})
+                a.set_data({"x": px, "y": py})
             except Exception:
                 return None
             nm = str(a)
