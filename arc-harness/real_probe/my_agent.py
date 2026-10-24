@@ -390,6 +390,10 @@ class MyAgent(Agent):
             try:
                 d["st"] = int(self._skf_stage)
                 d["fv"] = int(getattr(self, "_skf_fv", -1))
+                try:
+                    d["cc"] = int(getattr(self, "_skf_cc", -1))
+                except Exception:
+                    pass
             except Exception:
                 pass
             try:
@@ -838,6 +842,14 @@ class MyAgent(Agent):
             try:
                 if int(getattr(self, "_ls_pos_stall", 0)) >= 4:
                     self._ls_pos_stall = 0
+                    try:
+                        _btc = int(tc) if tc is not None else -1
+                        if _btc >= 0:
+                            self._nav_dead.add(_btc)
+                            self._nav_last = None
+                            self._ls_prevd = None
+                    except Exception:
+                        pass
                     _perp = [nm for dn, nm in self._nav_arrows.items() if dn != best_dn]
                     for _pnm in sorted(_perp, key=lambda n: self._act_use[n]):
                         if _pnm in byname:
@@ -1163,10 +1175,18 @@ class MyAgent(Agent):
                     self._skf_stag += 1
                 if _contact:
                     try:
-                        _fast = (self._skf_ti % 2 == 0)
+                        _ci = int(getattr(self, "_skf_combo", 0)) % 5
                     except Exception:
-                        _fast = False
-                    if _fast and six:
+                        _ci = 0
+                    try:
+                        self._skf_combo = int(getattr(self, "_skf_combo", 0)) + 1
+                    except Exception:
+                        self._skf_combo = 1
+                    try:
+                        self._skf_cc = _ci
+                    except Exception:
+                        pass
+                    if _ci == 0 and six:
                         self._skf_stage = 2
                         self._skf_fires = 0
                         try:
@@ -1184,6 +1204,14 @@ class MyAgent(Agent):
                             self._sk_clicks += 1
                             self._record_choice(h, (_nmc0, _tx, _ty))
                             return _a0
+                    elif _ci in (1, 2, 3):
+                        self._skf_stage = 4
+                        self._skf_fires = 0
+                        try:
+                            self._skf_fv = _ci
+                        except Exception:
+                            pass
+                        return None
                     self._skf_stage = 1
                     self._skf_fires = 0
                 elif self._skf_fires >= 12 or self._skf_stag >= 6:
@@ -1250,6 +1278,40 @@ class MyAgent(Agent):
                     return byname[_nm2]
                 self._skf_stage = 3
                 self._skf_fires = 0
+                return None
+            if self._skf_stage == 4:
+                self._skf_fires += 1
+                try:
+                    _cc = int(getattr(self, "_skf_cc", 1))
+                except Exception:
+                    _cc = 1
+                if self._skf_fires == 1:
+                    _mv = "GameAction.ACTION7" if _cc == 1 else ("GameAction.ACTION1" if _cc == 2 else "GameAction.ACTION2")
+                    if _mv in byname:
+                        self._act_use[_mv] += 1
+                        self._record_choice(h, (_mv, -1, -1))
+                        return byname[_mv]
+                    self._skf_stage = 1
+                    self._skf_fires = 0
+                    return None
+                if self._skf_fires == 2 and six:
+                    _a4 = six[0]
+                    try:
+                        _a4.set_data({"x": _tx, "y": _ty})
+                    except Exception:
+                        _a4 = None
+                    if _a4 is not None:
+                        _nmc4 = str(_a4)
+                        self._act_use[_nmc4] += 1
+                        self._sk_clicks += 1
+                        self._record_choice(h, (_nmc4, _tx, _ty))
+                        return _a4
+                if self._skf_fires >= 3:
+                    self._skf_ti += 1
+                    self._skf_phase = "aim"
+                    self._skf_stage = 0
+                    self._skf_fires = 0
+                    return None
                 return None
             if self._skf_stage == 3:
                 self._skf_fires += 1
