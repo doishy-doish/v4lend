@@ -318,6 +318,9 @@ class MyAgent(Agent):
         self._nav_last = None
         self._nav_same_dir = 0
         self._nav_last_dir = None
+        self._gpar = 0
+        self._ls_prevd = None
+        self._ls_stall = 0
         self._scal = []
         self._ff = {}
         self._prev_gate = None
@@ -502,9 +505,21 @@ class MyAgent(Agent):
         self._prev_sig = sig
         self._prefix.append(sig)
         try:
+            if sig is not None and len(sig) > 2 and sig[1] != -1:
+                try:
+                    self._gpar = 1 - int(getattr(self, "_gpar", 0))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
             _nm0 = sig[0] if sig else ""
             if "RESET" in str(_nm0):
                 self._att = 0
+                try:
+                    self._gpar = 0
+                except Exception:
+                    pass
             else:
                 self._att = int(getattr(self, "_att", 0)) + 1
         except Exception:
@@ -737,7 +752,25 @@ class MyAgent(Agent):
                 pass
             if tgt is None:
                 return None
-            if bestd is not None and bestd < 1.6:
+            try:
+                _pd = getattr(self, "_ls_prevd", None)
+                if _pd is not None and bestd is not None and bestd >= _pd - 0.01:
+                    self._ls_stall = int(getattr(self, "_ls_stall", 0)) + 1
+                else:
+                    self._ls_stall = 0
+                self._ls_prevd = bestd
+            except Exception:
+                pass
+            try:
+                d_stall = int(getattr(self, "_ls_stall", 0))
+            except Exception:
+                d_stall = 0
+            if (bestd is not None and bestd < 1.6) or d_stall >= 6:
+                if d_stall >= 6:
+                    try:
+                        self._ls_stall = 0
+                    except Exception:
+                        pass
                 for nm in sorted(self._nav_interact, key=lambda n: self._act_use[n]):
                     if h is not None and (h, nm, -1, -1) in self._pair_seen:
                         continue
@@ -917,8 +950,12 @@ class MyAgent(Agent):
                         if self._best_lc > self._bfs_lc0:
                             self._bfs_win = list(_seq)
                         _gid = self._gate_id(grid)
-                        if _gid is not None and _gid not in self._bfs_seen and len(_seq) < 4:
-                            self._bfs_seen.add(_gid)
+                        try:
+                            _gkey = (_gid, int(getattr(self, "_gpar", 0)))
+                        except Exception:
+                            _gkey = None
+                        if _gid is not None and _gkey is not None and _gkey not in self._bfs_seen and len(_seq) < 5:
+                            self._bfs_seen.add(_gkey)
                             for _gc in self._gate_clicks[:6]:
                                 self._bfs_queue.append(_seq + [_gc])
                         self._bfs_i += 1
@@ -1114,6 +1151,10 @@ class MyAgent(Agent):
                         self._skf_fv = _hold
                     except Exception:
                         pass
+                    if "GameAction.ACTION7" in byname:
+                        self._sk_clicks += 1
+                        self._record_choice(h, ("GameAction.ACTION7", -1, -1))
+                        return byname["GameAction.ACTION7"]
                 if "GameAction.ACTION4" in byname:
                     self._sk_clicks += 1
                     self._record_choice(h, ("GameAction.ACTION4", -1, -1))
@@ -1221,6 +1262,7 @@ class MyAgent(Agent):
             self._expect_reset = False
             try:
                 self._att = 0
+                self._gpar = 0
             except Exception:
                 pass
             return GameAction.RESET
