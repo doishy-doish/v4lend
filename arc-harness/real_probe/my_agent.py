@@ -269,6 +269,7 @@ class MyAgent(Agent):
         self._probe_last = None
         self._probe_done = False
         self._probe_cnt = {}
+        self._nav_avoid = set()
         self._nav_scores = []
         self._barfill = 0.0
         self._csweep = None
@@ -302,6 +303,7 @@ class MyAgent(Agent):
                 "nav_interact": list(self._nav_interact), "cbest": self._cbest,
                 "cbest_score": self._cbest_score, "nav_scores": self._nav_scores,
                 "barfill": self._barfill, "nav_last": self._nav_last,
+                "nav_avoid": sorted(self._nav_avoid),
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -407,6 +409,27 @@ class MyAgent(Agent):
                                     self._nav_cursor = _pc
                                     best_c = _pc
                                     break
+                        try:
+                            _cur_ent = self._probe_disp.get(self._nav_cursor, {})
+                            _cur_dir = {}
+                            for _nm, _v in _cur_ent.items():
+                                _cur_dir[_nm] = ("y" if abs(_v[0]) >= abs(_v[1]) else "x", 1 if (_v[0] if abs(_v[0]) >= abs(_v[1]) else _v[1]) > 0 else -1)
+                            for _cc, _ent2 in self._probe_disp.items():
+                                if _cc == self._nav_cursor or _cc == self._nav_bg or _cc == 0:
+                                    continue
+                                _match = True
+                                _shared = 0
+                                for _nm, _v in _ent2.items():
+                                    if _nm in _cur_dir:
+                                        _shared += 1
+                                        _d = ("y" if abs(_v[0]) >= abs(_v[1]) else "x", 1 if (_v[0] if abs(_v[0]) >= abs(_v[1]) else _v[1]) > 0 else -1)
+                                        if _d != _cur_dir[_nm]:
+                                            _match = False
+                                            break
+                                if _match and _shared >= 2:
+                                    self._nav_avoid.add(_cc)
+                        except Exception:
+                            pass
                         self._nav_arrows = {}
                         self._nav_steps = {}
                         if self._nav_cursor is not None:
@@ -444,7 +467,7 @@ class MyAgent(Agent):
             if self._nav_cursor not in cent:
                 return None
             cy, cx, _cc = cent[self._nav_cursor]
-            cands_c = [(c, v) for c, v in cent.items() if c != self._nav_bg and c != 0 and c != self._nav_cursor and v[2] >= 4]
+            cands_c = [(c, v) for c, v in cent.items() if c != self._nav_bg and c != 0 and c != self._nav_cursor and v[2] >= 4 and c not in self._nav_avoid]
             if not cands_c:
                 return None
             cands_c.sort(key=lambda t: t[1][2])
