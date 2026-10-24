@@ -250,6 +250,16 @@ class MyAgent(Agent):
         self._combo_i = 0
         self._sk_move2 = {}
         self._sk_prev_c = None
+        self._probe_disp = {}
+        self._probe_pre = None
+        self._probe_last = None
+        self._probe_done = False
+        self._nav_bg = 0
+        self._nav_cursor = None
+        self._nav_arrows = {}
+        self._nav_interact = []
+        self._nav_dead = set()
+        self._nav_steps = {}
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -263,6 +273,8 @@ class MyAgent(Agent):
                 "sk_target": self._sk_target, "sk_clicks": self._sk_clicks,
                 "sk_move": dict(self._sk_move), "wins": len(self._wins), "best_lc": self._best_lc,
                 "m5phase": self._m5phase, "best_click": self._best_click,
+                "nav_cursor": self._nav_cursor, "nav_arrows": dict(self._nav_arrows),
+                "nav_interact": list(self._nav_interact),
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -286,110 +298,180 @@ class MyAgent(Agent):
         self._record_choice(h, (name, -1, -1))
         return a
 
-    def _sk48_pick(self, grid, h, simple, six, cands):
+    def _centroids(self, grid):
+        acc = {}
+        try:
+            for y in range(len(grid)):
+                row = grid[y]
+                for x in range(len(row)):
+                    c = row[x]
+                    if c in acc:
+                        s = acc[c]
+                        s[0] += y
+                        s[1] += x
+                        s[2] += 1
+                    else:
+                        acc[c] = [y, x, 1]
+        except Exception:
+            return {}
+        out = {}
+        for c, s in acc.items():
+            out[c] = (s[0] / s[2], s[1] / s[2], s[2])
+        return out
+
+    def _nav_pick(self, grid, h, simple, six, cands):
         names = sorted(set(str(a) for a in simple))
         byname = {}
         for a in simple:
             byname.setdefault(str(a), a)
-        cur = _sk_cursor(grid)
-        if cur is not None and self._prev_sig is not None and self._sk_prev_c is not None:
-            nm0 = self._prev_sig[0]
-            if nm0 in byname and self._prev_sig[1] == -1:
-                dx = float(cur[1] - self._sk_prev_c[1])
-                dy = float(cur[0] - self._sk_prev_c[0])
-                ox, oy = self._sk_move2.get(nm0, (0.0, 0.0))
-                self._sk_move2[nm0] = (ox * 0.7 + dx * 0.3, oy * 0.7 + dy * 0.3)
-                ox1 = self._sk_move.get(nm0, 0.0)
-                self._sk_move[nm0] = ox1 * 0.7 + dy * 0.3
-        if cur is not None:
-            self._sk_prev_c = (cur[0], cur[1])
         if self._m5phase == "learn":
-            self._m5_left -= 1
-            if self._m5_left <= 0:
-                pts = []
-                for gy in range(0, 64, 16):
-                    for gx in range(0, 64, 16):
-                        pts.append(("click", gx, gy))
+            if not self._sweep and not self._probe_done:
+                self._sweep = list(names)
+                self._probe_done = True
                 try:
-                    for _s in _segments(grid):
-                        if _s["area"] >= 9 and _s["color"] in SK48_BLOCK_COLORS:
-                            y1, x1, y2, x2 = _s["bbox"]
-                            pts.append(("click", (x1 + x2) // 2, (y1 + y2) // 2))
+                    cent0 = self._centroids(grid)
+                    self._nav_bg = max(cent0.keys(), key=lambda c: cent0[c][2])
                 except Exception:
-                    pass
-                if cur is not None:
-                    pts.append(("click", 8, cur[0]))
-                self._sweep = pts
-                self._m5phase = "sweep"
-                self._need_reset = True
-            return self._simple_pick(simple, h)
-        if self._m5phase == "sweep":
-            if self._pending is not None:
-                try:
-                    gained = (self._best_lc, h != self._pre_h2)
-                except Exception:
-                    gained = (self._best_lc, False)
-                score = (self._best_lc - self._pending[0]) * 1000 + (1 if gained[1] else 0)
-                if score > self._best_score:
-                    self._best_score = score
-                    self._best_click = self._pending[1]
-                self._pending = None
-            if not self._sweep:
-                self._m5phase = "combo"
-                acts = [n for n in names][:5]
-                self._combo_pairs = [(a, b) for a in acts for b in acts]
-                self._combo_i = 0
-                self._need_reset = True
-            elif self._need_reset:
-                self._need_reset = False
-                self._expect_reset = True
-                return GameAction.RESET
+                    self._nav_bg = 0
+                    cent0 = {}
+                self._probe_pre = cent0
+                self._probe_disp = {}
+                self._probe_last = None
             else:
-                kind = self._sweep.pop(0)
-                if kind[0] == "click" and six:
-                    _, px, py = kind
+                if self._probe_last is not None and self._probe_pre:
+                    try:
+                        cent1 = self._centroids(grid)
+                        for c, v1 in cent1.items():
+                            if c in self._probe_pre and v1[2] > 2:
+                                v0 = self._probe_pre[c]
+                                d = abs(v1[0] - v0[0]) + abs(v1[1] - v0[1])
+                                if d > 0.05:
+                                    ent = self._probe_disp.setdefault(c, {})
+                                    ent[self._probe_last] = (v1[0] - v0[0], v1[1] - v0[1])
+                    except Exception:
+                        pass
+                    self._probe_last = None
+                if not self._sweep:
+                    self._m5phase = "nav"
+                    try:
+                        best_c, best_d = None, 0.5
+                        for c, ent in self._probe_disp.items():
+                            if c == self._nav_bg or c == 0:
+                                continue
+                            tot_d = sum(abs(v[0]) + abs(v[1]) for v in ent.values())
+                            if tot_d > best_d:
+                                best_d, best_c = tot_d, c
+                        self._nav_cursor = best_c
+                        self._nav_arrows = {}
+                        self._nav_steps = {}
+                        if best_c is not None:
+                            for nm, v in self._probe_disp.get(best_c, {}).items():
+                                dy, dx = v
+                                if abs(dy) >= abs(dx):
+                                    dn = "up" if dy < 0 else "down"
+                                else:
+                                    dn = "left" if dx < 0 else "right"
+                                if dn not in self._nav_arrows:
+                                    self._nav_arrows[dn] = nm
+                                    self._nav_steps[dn] = (float(dy), float(dx))
+                        self._nav_interact = [n for n in names if n not in self._nav_arrows.values()]
+                    except Exception:
+                        self._nav_cursor = None
+                    return self._simple_pick(simple, h)
+                nm = self._sweep.pop(0)
+                try:
+                    self._probe_pre = self._centroids(grid)
+                except Exception:
+                    self._probe_pre = {}
+                self._probe_last = nm
+                if nm in byname:
+                    self._act_use[nm] += 1
+                    self._record_choice(h, (nm, -1, -1))
+                    return byname[nm]
+            return self._simple_pick(simple, h)
+        if self._m5phase == "nav":
+            if self._nav_cursor is None or len(self._nav_arrows) < 1:
+                return None
+            try:
+                cent = self._centroids(grid)
+            except Exception:
+                return None
+            if self._nav_cursor not in cent:
+                return None
+            cy, cx, _cc = cent[self._nav_cursor]
+            cands_c = [(c, v) for c, v in cent.items() if c != self._nav_bg and c != 0 and c != self._nav_cursor and v[2] >= 4]
+            if not cands_c:
+                return None
+            cands_c.sort(key=lambda t: t[1][2])
+            order = [cands_c[0]] + [t for t in cands_c[1:] if t[0] not in getattr(self, "_nav_dead", set())]
+            tc, tv = order[0][0], order[0][1]
+            tgt = None
+            bestd = None
+            for yy in range(max(0, int(cy) - 3), min(len(grid), int(cy) + 4)):
+                for xx in range(max(0, int(cx) - 3), min(len(grid[0]), int(cx) + 4)):
+                    if grid[yy][xx] == tc:
+                        d = abs(yy - cy) + abs(xx - cx)
+                        if bestd is None or d < bestd:
+                            bestd, tgt = d, (yy, xx)
+            if tgt is None:
+                cells = [(abs(v[0] - cy) + abs(v[1] - cx), c) for c, v in cands_c]
+                cells.sort()
+                tc = cells[0][1]
+                tv = cent[tc]
+                tgt = (int(tv[0]), int(tv[1]))
+                bestd = cells[0][0]
+            if bestd is not None and bestd < 1.6:
+                for nm in sorted(self._nav_interact, key=lambda n: self._act_use[n]):
+                    if h is not None and (h, nm, -1, -1) in self._pair_seen:
+                        continue
+                    if nm in byname:
+                        if h is not None:
+                            self._pair_seen.add((h, nm, -1, -1))
+                        self._act_use[nm] += 1
+                        self._sk_clicks += 1
+                        self._record_choice(h, (nm, -1, -1))
+                        return byname[nm]
+                if six:
+                    ty, tx = tgt
                     a = six[0]
                     try:
-                        a.set_data({"x": px, "y": py})
+                        a.set_data({"x": tx, "y": ty})
                     except Exception:
-                        self._need_reset = True
-                        return GameAction.RESET
-                    nm = str(a)
-                    if h is not None:
-                        self._pair_seen.add((h, nm, px, py))
-                    self._act_use[nm] += 1
-                    self._pending = (self._best_lc, (px, py))
-                    self._pre_h2 = h
-                    self._need_reset = True
-                    self._sk_clicks += 1
-                    self._record_choice(h, (nm, px, py))
-                    return a
-                else:
-                    self._need_reset = True
-                    if kind[0] in byname:
-                        self._act_use[kind[0]] += 1
-                        self._record_choice(h, (kind[0], -1, -1))
-                        return byname[kind[0]]
-                    return self._simple_pick(simple, h)
-        if self._m5phase == "combo":
-            if self._combo_i >= len(self._combo_pairs):
-                self._m5phase = "wander"
-                return None
-            if self._need_reset:
-                self._need_reset = False
-                self._expect_reset = True
-                return GameAction.RESET
-            a_nm, b_nm = self._combo_pairs[self._combo_i]
-            self._combo_i += 1
-            self._need_reset = True
-            if a_nm in byname and b_nm in byname:
-                self._replay = [(a_nm, -1, -1), (b_nm, -1, -1)]
-                hit = self._replay_pick(cands, h)
-                if hit is not None:
-                    return hit
-            self._need_reset = True
-            self._expect_reset = True
-            return GameAction.RESET
+                        a = None
+                    if a is not None:
+                        nm = str(a)
+                        if h is None or (h, nm, tx, ty) not in self._pair_seen:
+                            if h is not None:
+                                self._pair_seen.add((h, nm, tx, ty))
+                            self._act_use[nm] += 1
+                            self._target_use[(ty, tx)] += 1
+                            self._sk_clicks += 1
+                            self._sk_target = tc
+                            self._record_choice(h, (nm, tx, ty))
+                            return a
+                if not hasattr(self, "_nav_dead"):
+                    self._nav_dead = set()
+                self._nav_dead.add(tc)
+                return self._simple_pick(simple, h)
+            best_a, best_q = None, None
+            for dn, nm in self._nav_arrows.items():
+                if nm not in byname:
+                    continue
+                try:
+                    dy, dx = self._nav_steps.get(dn, (0.0, 0.0))
+                except Exception:
+                    dy, dx = 0.0, 0.0
+                if dy == 0.0 and dx == 0.0:
+                    dy = -1.0 if dn == "up" else (1.0 if dn == "down" else 0.0)
+                    dx = -1.0 if dn == "left" else (1.0 if dn == "right" else 0.0)
+                q = abs((cy + dy) - tgt[0]) + abs((cx + dx) - tgt[1])
+                if best_q is None or q < best_q - 0.01 or (abs(q - best_q) < 0.01 and self._act_use[nm] < self._act_use[best_a]):
+                    best_q, best_a = q, nm
+            if best_a is not None:
+                self._act_use[best_a] += 1
+                self._record_choice(h, (best_a, -1, -1))
+                return byname[best_a]
+            return None
         return None
     def _replay_pick(self, cands, h):
         while self._replay:
@@ -526,8 +608,11 @@ class MyAgent(Agent):
             hit = self._replay_pick(cands, h)
             if hit is not None:
                 return hit
-        if self._game_id == "sk48" and grid and six and simple:
-            sk_hit = self._sk48_pick(grid, h, simple, six, cands)
+        if grid and simple:
+            try:
+                sk_hit = self._nav_pick(grid, h, simple, six, cands)
+            except Exception:
+                sk_hit = None
             if sk_hit is not None:
                 return sk_hit
         if ((self._stall >= BACKTRACK_STALL or self._since_novel >= 25) and self._backtracks < MAX_BACKTRACKS
