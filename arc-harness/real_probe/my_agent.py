@@ -254,6 +254,12 @@ class MyAgent(Agent):
         self._probe_pre = None
         self._probe_last = None
         self._probe_done = False
+        self._probe_cnt = {}
+        self._csweep = None
+        self._cbest = None
+        self._cbest_score = -1
+        self._cpending = None
+        self._cpre = None
         self._nav_bg = 0
         self._nav_cursor = None
         self._nav_arrows = {}
@@ -274,7 +280,8 @@ class MyAgent(Agent):
                 "sk_move": dict(self._sk_move), "wins": len(self._wins), "best_lc": self._best_lc,
                 "m5phase": self._m5phase, "best_click": self._best_click,
                 "nav_cursor": self._nav_cursor, "nav_arrows": dict(self._nav_arrows),
-                "nav_interact": list(self._nav_interact),
+                "nav_interact": list(self._nav_interact), "cbest": self._cbest,
+                "cbest_score": self._cbest_score,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -348,19 +355,25 @@ class MyAgent(Agent):
                                 if d > 0.05:
                                     ent = self._probe_disp.setdefault(c, {})
                                     ent[self._probe_last] = (v1[0] - v0[0], v1[1] - v0[1])
+                                    try:
+                                        self._probe_cnt[(c, self._probe_last)] = v1[2]
+                                    except Exception:
+                                        pass
                     except Exception:
                         pass
                     self._probe_last = None
                 if not self._sweep:
                     self._m5phase = "nav"
                     try:
-                        best_c, best_d = None, 0.5
+                        best_c, best_d = None, 0.01
                         for c, ent in self._probe_disp.items():
                             if c == self._nav_bg or c == 0:
                                 continue
-                            tot_d = sum(abs(v[0]) + abs(v[1]) for v in ent.values())
-                            if tot_d > best_d:
-                                best_d, best_c = tot_d, c
+                            for _nm, _v in ent.items():
+                                _cnt = self._probe_cnt.get((c, _nm), 50)
+                                _s = (abs(_v[0]) + abs(_v[1])) / (1.0 + _cnt)
+                                if _s > best_d:
+                                    best_d, best_c = _s, c
                         self._nav_cursor = best_c
                         self._nav_arrows = {}
                         self._nav_steps = {}
@@ -473,6 +486,78 @@ class MyAgent(Agent):
                 return byname[best_a]
             return None
         return None
+    def _clickonly_pick(self, grid, h, six):
+        if not six:
+            return None
+        if self._csweep is None:
+            pts = []
+            for gy in range(0, 64, 16):
+                for gx in range(0, 64, 16):
+                    pts.append((gx, gy))
+            try:
+                for t in _targets(grid)[:16]:
+                    pts.append((t[1], t[0]))
+            except Exception:
+                pass
+            seen = set()
+            uniq = []
+            for p in pts:
+                if p not in seen:
+                    seen.add(p)
+                    uniq.append(p)
+            self._csweep = uniq
+            self._need_reset = True
+        if self._cpending is not None:
+            try:
+                changed = (h != self._cpre)
+            except Exception:
+                changed = False
+            score = (self._best_lc - self._cpending[0]) * 1000 + (1 if changed else 0)
+            if score > self._cbest_score:
+                self._cbest_score = score
+                self._cbest = self._cpending[1]
+            self._cpending = None
+        if not self._csweep:
+            if self._cbest is None:
+                return None
+            if self._need_reset:
+                self._need_reset = False
+                self._expect_reset = True
+                return GameAction.RESET
+            px, py = self._cbest
+            a = six[0]
+            try:
+                a.set_data({"x": px, "y": py})
+            except Exception:
+                return None
+            nm = str(a)
+            self._act_use[nm] += 1
+            self._sk_clicks += 1
+            self._need_reset = True
+            self._record_choice(h, (nm, px, py))
+            return a
+        if self._need_reset:
+            self._need_reset = False
+            self._expect_reset = True
+            return GameAction.RESET
+        px, py = self._csweep.pop(0)
+        a = six[0]
+        try:
+            a.set_data({"x": px, "y": py})
+        except Exception:
+            self._need_reset = True
+            return GameAction.RESET
+        nm = str(a)
+        if h is not None:
+            self._pair_seen.add((h, nm, px, py))
+        self._act_use[nm] += 1
+        self._cpending = (self._best_lc, (px, py))
+        self._cpre = h
+        self._need_reset = True
+        self._sk_clicks += 1
+        self._record_choice(h, (nm, px, py))
+        return a
+
     def _replay_pick(self, cands, h):
         while self._replay:
             nm, x, y = self._replay[0]
@@ -608,9 +693,12 @@ class MyAgent(Agent):
             hit = self._replay_pick(cands, h)
             if hit is not None:
                 return hit
-        if grid and simple:
+        if grid and (simple or six):
             try:
-                sk_hit = self._nav_pick(grid, h, simple, six, cands)
+                if simple:
+                    sk_hit = self._nav_pick(grid, h, simple, six, cands)
+                else:
+                    sk_hit = self._clickonly_pick(grid, h, six)
             except Exception:
                 sk_hit = None
             if sk_hit is not None:
