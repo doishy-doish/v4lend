@@ -6,7 +6,16 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "vendor" / "ARC-AGI-3-Agents"))
+VENDOR = ROOT / "vendor" / "ARC-AGI-3-Agents"
+import types
+pkg = types.ModuleType("agents")
+pkg.__path__ = [str(VENDOR / "agents")]
+sys.modules["agents"] = pkg
+for _name in ("recorder", "tracing", "agent"):
+    _spec = importlib.util.spec_from_file_location("agents." + _name, VENDOR / "agents" / (_name + ".py"))
+    _mod = importlib.util.module_from_spec(_spec)
+    sys.modules["agents." + _name] = _mod
+    _spec.loader.exec_module(_mod)
 
 import arc_agi
 from arc_agi import OperationMode
