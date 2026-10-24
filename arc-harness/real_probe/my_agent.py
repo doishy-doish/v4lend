@@ -22,6 +22,8 @@ SK48_BLOCK_COLORS = (6, 8, 9, 14)
 SK48_STRIP_Y = 44
 SK48_BOARD_X = 16
 SK48_ALIGN_TOL = 2
+FLICKER_STEPS = 13
+FLICKER_MIN = 10
 
 
 def _grid(latest_frame):
@@ -108,6 +110,12 @@ def _canon(grid):
     return best
 
 
+def _canon_masked(grid, mask):
+    if mask:
+        grid = [[-1 if (y, x) in mask else v for x, v in enumerate(row)] for y, row in enumerate(grid)]
+    return _canon(grid)
+
+
 def _coerce(a):
     if isinstance(a, GameAction):
         return a
@@ -146,7 +154,7 @@ def _sk_cursor(grid):
     if best is None:
         return None
     y1, x1, y2, x2 = best["bbox"]
-    return ((y1 + y2) // 2, best["color"])
+    return ((y1 + y2) // 2, (x1 + x2) // 2, best["color"])
 
 
 def _sk_blocks(grid):
@@ -224,6 +232,24 @@ class MyAgent(Agent):
         self._sk_prev_cy = None
         self._sk_target = None
         self._sk_clicks = 0
+        self._flick_cnt = Counter()
+        self._flick_n = 0
+        self._prev_grid = None
+        self._mask = None
+        self._best_lc = 0
+        self._wins = []
+        self._m5phase = "learn"
+        self._m5_left = 12
+        self._sweep = []
+        self._need_reset = False
+        self._pending = None
+        self._pre_h2 = None
+        self._best_click = None
+        self._best_score = -1
+        self._combo_pairs = []
+        self._combo_i = 0
+        self._sk_move2 = {}
+        self._sk_prev_c = None
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -235,7 +261,9 @@ class MyAgent(Agent):
                 "pairs_tried": len(self._pair_seen), "backtracks": self._backtracks,
                 "effective": sorted(self._effective), "snaps": len(self._snaps),
                 "sk_target": self._sk_target, "sk_clicks": self._sk_clicks,
-                "sk_move": dict(self._sk_move)}
+                "sk_move": dict(self._sk_move), "wins": len(self._wins), "best_lc": self._best_lc,
+                "m5phase": self._m5phase, "best_click": self._best_click,
+                "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
         self._prev_h = h
@@ -258,92 +286,111 @@ class MyAgent(Agent):
         self._record_choice(h, (name, -1, -1))
         return a
 
-    def _sk48_pick(self, grid, h, simple, six):
+    def _sk48_pick(self, grid, h, simple, six, cands):
+        names = sorted(set(str(a) for a in simple))
+        byname = {}
+        for a in simple:
+            byname.setdefault(str(a), a)
         cur = _sk_cursor(grid)
-        blocks = _sk_blocks(grid)
-        if cur is None or not blocks:
-            return None
-        cy, _ccol = cur
-        if (self._prev_sig is not None and self._sk_prev_cy is not None
-                and self._prev_sig[0] in [str(a) for a in simple]
-                and self._prev_sig[1] == -1):
-            dy = cy - self._sk_prev_cy
+        if cur is not None and self._prev_sig is not None and self._sk_prev_c is not None:
             nm0 = self._prev_sig[0]
-            old = self._sk_move.get(nm0, 0.0)
-            self._sk_move[nm0] = old * 0.7 + float(dy) * 0.3
-        self._sk_prev_cy = cy
-        mag = 6 if 6 in blocks else (14 if 14 in blocks else None)
-        order = [c for c in _sk_strip_order(grid) if c in (8, 9) or (mag is not None and c == mag)]
-        if not order:
-            order = [c for c in (8, mag, 9) if c is not None]
-        target = None
-        for c in order:
-            if c in blocks:
-                target = c
-                break
-        if target is None:
-            return None
-        self._sk_target = target
-        ty, tx, _ta = blocks[target]
-        err = ty - cy
-        if abs(err) <= SK48_ALIGN_TOL:
-            sweep = []
-            for py, px in [(ty, tx), (cy, 8), (ty, 8), ((cy + ty) // 2, (8 + tx) // 2)]:
-                for a in six:
+            if nm0 in byname and self._prev_sig[1] == -1:
+                dx = float(cur[1] - self._sk_prev_c[1])
+                dy = float(cur[0] - self._sk_prev_c[0])
+                ox, oy = self._sk_move2.get(nm0, (0.0, 0.0))
+                self._sk_move2[nm0] = (ox * 0.7 + dx * 0.3, oy * 0.7 + dy * 0.3)
+                ox1 = self._sk_move.get(nm0, 0.0)
+                self._sk_move[nm0] = ox1 * 0.7 + dy * 0.3
+        if cur is not None:
+            self._sk_prev_c = (cur[0], cur[1])
+        if self._m5phase == "learn":
+            self._m5_left -= 1
+            if self._m5_left <= 0:
+                pts = []
+                for gy in range(0, 64, 16):
+                    for gx in range(0, 64, 16):
+                        pts.append(("click", gx, gy))
+                try:
+                    for _s in _segments(grid):
+                        if _s["area"] >= 9 and _s["color"] in SK48_BLOCK_COLORS:
+                            y1, x1, y2, x2 = _s["bbox"]
+                            pts.append(("click", (x1 + x2) // 2, (y1 + y2) // 2))
+                except Exception:
+                    pass
+                if cur is not None:
+                    pts.append(("click", 8, cur[0]))
+                self._sweep = pts
+                self._m5phase = "sweep"
+                self._need_reset = True
+            return self._simple_pick(simple, h)
+        if self._m5phase == "sweep":
+            if self._pending is not None:
+                try:
+                    gained = (self._best_lc, h != self._pre_h2)
+                except Exception:
+                    gained = (self._best_lc, False)
+                score = (self._best_lc - self._pending[0]) * 1000 + (1 if gained[1] else 0)
+                if score > self._best_score:
+                    self._best_score = score
+                    self._best_click = self._pending[1]
+                self._pending = None
+            if not self._sweep:
+                self._m5phase = "combo"
+                acts = [n for n in names][:5]
+                self._combo_pairs = [(a, b) for a in acts for b in acts]
+                self._combo_i = 0
+                self._need_reset = True
+            elif self._need_reset:
+                self._need_reset = False
+                self._expect_reset = True
+                return GameAction.RESET
+            else:
+                kind = self._sweep.pop(0)
+                if kind[0] == "click" and six:
+                    _, px, py = kind
+                    a = six[0]
+                    try:
+                        a.set_data({"x": px, "y": py})
+                    except Exception:
+                        self._need_reset = True
+                        return GameAction.RESET
                     nm = str(a)
-                    if h is not None and (h, nm, px, py) in self._pair_seen:
-                        continue
-                    sweep.append((self._act_use[nm], (py, px), a))
-            for nm in sorted(set(str(a) for a in simple)):
-                if h is not None and (h, nm, -1, -1) in self._pair_seen:
-                    continue
-                sweep.append((self._act_use[nm], None, nm))
-            if not sweep:
-                for py, px in [(ty, tx), (cy, 8)]:
-                    for a in six:
-                        sweep.append((self._act_use[str(a)], (py, px), a))
-            sweep.sort(key=lambda t: t[0])
-            _u, pt, pick = sweep[0]
-            if pt is None:
-                for a in simple:
-                    if str(a) == pick:
-                        if h is not None:
-                            self._pair_seen.add((h, pick, -1, -1))
-                        self._act_use[pick] += 1
-                        self._sk_clicks += 1
-                        self._record_choice(h, (pick, -1, -1))
-                        return a
-                return self._simple_pick(simple, h)
-            py, px = pt
-            a = pick
-            try:
-                a.set_data({"x": px, "y": py})
-            except Exception:
-                return None
-            nm = str(a)
-            if h is not None:
-                self._pair_seen.add((h, nm, tx, ty))
-            self._act_use[nm] += 1
-            self._target_use[(ty, tx)] += 1
-            self._sk_clicks += 1
-            self._record_choice(h, (nm, tx, ty))
-            return a
-        want = 1 if err > 0 else -1
-        best_nm = None
-        best_v = None
-        for nm, v in self._sk_move.items():
-            if (want > 0 and v > 0.3) or (want < 0 and v < -0.3):
-                if best_v is None or abs(v) > abs(best_v):
-                    best_v = v
-                    best_nm = nm
-        if best_nm is not None:
-            for a in simple:
-                if str(a) == best_nm:
-                    self._act_use[best_nm] += 1
-                    self._record_choice(h, (best_nm, -1, -1))
+                    if h is not None:
+                        self._pair_seen.add((h, nm, px, py))
+                    self._act_use[nm] += 1
+                    self._pending = (self._best_lc, (px, py))
+                    self._pre_h2 = h
+                    self._need_reset = True
+                    self._sk_clicks += 1
+                    self._record_choice(h, (nm, px, py))
                     return a
-        return self._simple_pick(simple, h)
-
+                else:
+                    self._need_reset = True
+                    if kind[0] in byname:
+                        self._act_use[kind[0]] += 1
+                        self._record_choice(h, (kind[0], -1, -1))
+                        return byname[kind[0]]
+                    return self._simple_pick(simple, h)
+        if self._m5phase == "combo":
+            if self._combo_i >= len(self._combo_pairs):
+                self._m5phase = "wander"
+                return None
+            if self._need_reset:
+                self._need_reset = False
+                self._expect_reset = True
+                return GameAction.RESET
+            a_nm, b_nm = self._combo_pairs[self._combo_i]
+            self._combo_i += 1
+            self._need_reset = True
+            if a_nm in byname and b_nm in byname:
+                self._replay = [(a_nm, -1, -1), (b_nm, -1, -1)]
+                hit = self._replay_pick(cands, h)
+                if hit is not None:
+                    return hit
+            self._need_reset = True
+            self._expect_reset = True
+            return GameAction.RESET
+        return None
     def _replay_pick(self, cands, h):
         while self._replay:
             nm, x, y = self._replay[0]
@@ -416,6 +463,38 @@ class MyAgent(Agent):
         except Exception:
             h = None
         novel = h is not None and h not in self._visited
+        if grid is not None and self._mask is None and self._flick_n <= FLICKER_STEPS:
+            if self._prev_grid is not None and len(self._prev_grid) == len(grid) and len(grid[0]) == len(self._prev_grid[0]):
+                for y in range(len(grid)):
+                    for x in range(len(grid[0])):
+                        if grid[y][x] != self._prev_grid[y][x]:
+                            self._flick_cnt[(y, x)] += 1
+            self._flick_n += 1
+            try:
+                self._prev_grid = [list(row) for row in grid]
+            except Exception:
+                self._prev_grid = None
+            if self._flick_n == FLICKER_STEPS + 1:
+                self._mask = set([k for k, v in self._flick_cnt.items() if v >= FLICKER_MIN])
+        if grid is not None and self._mask:
+            try:
+                h = _canon_masked(grid, self._mask)
+            except Exception:
+                pass
+            novel = h is not None and h not in self._visited
+        try:
+            _lc = latest_frame.levels_completed
+            if callable(_lc):
+                _lc = _lc()
+            _lc = int(_lc)
+        except Exception:
+            _lc = None
+        if _lc is not None and _lc > self._best_lc:
+            self._best_lc = _lc
+            try:
+                self._wins.append((_lc, list(self._prefix)))
+            except Exception:
+                pass
         if h is not None:
             if not novel:
                 self._repeats += 1
@@ -448,7 +527,7 @@ class MyAgent(Agent):
             if hit is not None:
                 return hit
         if self._game_id == "sk48" and grid and six and simple:
-            sk_hit = self._sk48_pick(grid, h, simple, six)
+            sk_hit = self._sk48_pick(grid, h, simple, six, cands)
             if sk_hit is not None:
                 return sk_hit
         if ((self._stall >= BACKTRACK_STALL or self._since_novel >= 25) and self._backtracks < MAX_BACKTRACKS
