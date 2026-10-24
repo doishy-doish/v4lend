@@ -1,0 +1,6 @@
+CPU_COUNT=4
+MemTotal:       16373452 kB
+MemAvailable:   15392272 kB
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       958Mi        12Gi        40Mi       2.4Gi        14Gi
+/dev/root       145G   59G   86G  41% /
