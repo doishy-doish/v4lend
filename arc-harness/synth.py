@@ -1,6 +1,6 @@
 def candidates(objs):
     rules = []
-    small = [o for o in objs if o["size"] <= 4]
+    small = sorted([o for o in objs if o["size"] <= 4], key=lambda o: (o["size"], o["color"]))
     rest = sorted([o for o in objs if o["size"] > 4], key=lambda o: (o["size"], o["color"]))
     for o in small + rest:
         rules.append({"op": "click", "target": o["color"], "size": o["size"], "cells": o["cells"]})
