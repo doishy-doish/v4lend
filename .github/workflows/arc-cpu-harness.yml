@@ -26,3 +26,4 @@ jobs:
             arc-harness/blast-metrics.json
             arc-harness/preflight-metrics.json
           if-no-files-found: warn
+# preflight consolidated
