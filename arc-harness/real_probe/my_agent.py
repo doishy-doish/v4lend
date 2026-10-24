@@ -146,6 +146,7 @@ class MyAgent(Agent):
         self._stall = 0
         self._prev_h = None
         self._prev_sig = None
+        self._since_novel = 0
         self._effective = set()
         self._prefix = []
         self._snaps = []
@@ -225,6 +226,7 @@ class MyAgent(Agent):
             self._prefix = []
             self._last_h = None
             self._stall = 0
+            self._since_novel = 0
             if not self._expect_reset:
                 self._replay = None
             self._expect_reset = False
@@ -258,6 +260,9 @@ class MyAgent(Agent):
         if h is not None:
             if not novel:
                 self._repeats += 1
+                self._since_novel += 1
+            else:
+                self._since_novel = 0
             self._visited[h] += 1
         if novel:
             if self._prev_sig is not None:
@@ -283,7 +288,7 @@ class MyAgent(Agent):
             hit = self._replay_pick(cands, h)
             if hit is not None:
                 return hit
-        if (self._stall >= BACKTRACK_STALL and self._backtracks < MAX_BACKTRACKS
+        if ((self._stall >= BACKTRACK_STALL or self._since_novel >= 25) and self._backtracks < MAX_BACKTRACKS
                 and self._turns <= BACKTRACK_BEFORE_TURN and self._snaps):
             self._replay = list(self._snaps[0][0])
             if self._replay:
@@ -291,6 +296,7 @@ class MyAgent(Agent):
                 self._prefix = []
                 self._last_h = None
                 self._stall = 0
+                self._since_novel = 0
                 self._expect_reset = True
                 return GameAction.RESET
             self._replay = None
