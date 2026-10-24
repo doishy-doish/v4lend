@@ -266,6 +266,12 @@ class MyAgent(Agent):
         self._sk_prev_c = None
         self._probe_disp = {}
         self._probe_pre = None
+        self._combo_pairs = None
+        self._combo_i = 0
+        self._combo_stage = 0
+        self._combo_eval = 0
+        self._combo_win = None
+        self._simple_only = False
         self._probe_last = None
         self._probe_done = False
         self._probe_samples = {}
@@ -312,6 +318,7 @@ class MyAgent(Agent):
                 "barfill": self._barfill, "nav_last": self._nav_last,
                 "nav_avoid": sorted(self._nav_avoid),
                 "nav_steps": {k: [round(float(v[0]), 2), round(float(v[1]), 2)] for k, v in self._nav_steps.items()},
+                "combo_win": self._combo_win, "combo_done": self._combo_i,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -727,6 +734,44 @@ class MyAgent(Agent):
         self._record_choice(h, (nm, px, py))
         return a
 
+    def _combo_pick(self, h, simple):
+        if not self._simple_only:
+            return None
+        names = sorted(set(str(a) for a in simple))
+        byname = {}
+        for a in simple:
+            byname.setdefault(str(a), a)
+        if self._combo_pairs is None:
+            acts = names[:5]
+            self._combo_pairs = [(a, b) for a in acts for b in acts]
+            self._combo_i = 0
+            self._combo_stage = 0
+        if self._combo_i >= len(self._combo_pairs):
+            return None
+        if self._combo_stage == 2:
+            if self._best_lc > self._combo_eval:
+                self._combo_win = list(self._combo_pairs[self._combo_i])
+            self._combo_i += 1
+            self._combo_stage = 0
+            if self._combo_i >= len(self._combo_pairs):
+                return None
+        if self._combo_stage == 0:
+            self._combo_eval = self._best_lc
+            self._combo_stage = 1
+            self._expect_reset = True
+            return GameAction.RESET
+        a_nm, b_nm = self._combo_pairs[self._combo_i]
+        nm = a_nm if self._combo_stage == 1 else b_nm
+        if nm not in byname:
+            self._combo_i += 1
+            self._combo_stage = 0
+            return GameAction.RESET
+        if self._combo_stage == 1:
+            self._combo_stage = 2
+        self._act_use[nm] += 1
+        self._record_choice(h, (nm, -1, -1))
+        return byname[nm]
+
     def _replay_pick(self, cands, h):
         while self._replay:
             nm, x, y = self._replay[0]
@@ -769,6 +814,9 @@ class MyAgent(Agent):
             self._last_h = None
             self._stall = 0
             self._since_novel = 0
+            self._combo_pairs = None
+            self._combo_i = 0
+            self._combo_stage = 0
             if not self._expect_reset:
                 self._replay = None
             self._expect_reset = False
@@ -871,6 +919,14 @@ class MyAgent(Agent):
         cands = [a for a in avail if a is not GameAction.RESET]
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
+        self._simple_only = bool(simple) and not six
+        if self._simple_only:
+            try:
+                _ch = self._combo_pick(h, simple)
+            except Exception:
+                _ch = None
+            if _ch is not None:
+                return _ch
         if self._replay:
             hit = self._replay_pick(cands, h)
             if hit is not None:
