@@ -148,6 +148,27 @@ class MyAgent(Agent):
                 ftype = "ERR:" + str(ex)[:80]
                 fshape = None
             self._debug = {"avail": str(raw_dbg)[:300], "frame_type": ftype, "frame_shape": fshape}
+            try:
+                members = [(m.name, m.value) for m in GameAction]
+            except Exception as ex:
+                members = "ERR:" + str(ex)[:80]
+            coerced = []
+            for v in (raw_dbg if isinstance(raw_dbg, list) else []):
+                try:
+                    coerced.append(GameAction(v).name)
+                except Exception as ex:
+                    coerced.append("FAIL:" + str(ex)[:60])
+            try:
+                fr = fobj
+                dims = []
+                while isinstance(fr, list):
+                    dims.append(len(fr))
+                    fr = fr[0] if fr else None
+                sample = str(fobj)[:200]
+            except Exception as ex:
+                dims = "ERR:" + str(ex)[:80]
+                sample = ""
+            self._debug.update({"members": str(members)[:300], "coerced": str(coerced)[:300], "dims": str(dims), "sample": sample})
         h = None
         try:
             h = _canon(grid) if grid else None
