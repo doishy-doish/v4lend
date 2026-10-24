@@ -23,7 +23,7 @@ def test_salient_tier_zero():
 
 
 def test_status_bar_last():
-    grid = [[5] * 8 for _ in range(2)] + [[0] * 8 for _ in range(6)]
+    grid = [[5] * 8] + [[0] * 8 for _ in range(7)]
     segs = segment(grid)
     bars = status_bars(segs, 8)
     assert len(bars) == 1
