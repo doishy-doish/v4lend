@@ -282,6 +282,9 @@ class MyAgent(Agent):
         self._nav_interact = []
         self._nav_dead = set()
         self._nav_steps = {}
+        self._nav_last = None
+        self._nav_same_dir = 0
+        self._nav_last_dir = None
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -298,7 +301,7 @@ class MyAgent(Agent):
                 "nav_cursor": self._nav_cursor, "nav_arrows": dict(self._nav_arrows),
                 "nav_interact": list(self._nav_interact), "cbest": self._cbest,
                 "cbest_score": self._cbest_score, "nav_scores": self._nav_scores,
-                "barfill": self._barfill,
+                "barfill": self._barfill, "nav_last": self._nav_last,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -464,6 +467,10 @@ class MyAgent(Agent):
                         self._act_use[nm] += 1
                         self._sk_clicks += 1
                         self._record_choice(h, (nm, -1, -1))
+                        try:
+                            self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2), "dir": "interact:" + nm}
+                        except Exception:
+                            pass
                         return byname[nm]
                 if six:
                     ty, tx = tgt
@@ -482,12 +489,16 @@ class MyAgent(Agent):
                             self._sk_clicks += 1
                             self._sk_target = tc
                             self._record_choice(h, (nm, tx, ty))
+                            try:
+                                self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(ty), int(tx)], "bestd": round(float(bestd), 2), "dir": "click"}
+                            except Exception:
+                                pass
                             return a
                 if not hasattr(self, "_nav_dead"):
                     self._nav_dead = set()
                 self._nav_dead.add(tc)
                 return self._simple_pick(simple, h)
-            best_a, best_q = None, None
+            best_a, best_q, best_dn = None, None, None
             for dn, nm in self._nav_arrows.items():
                 if nm not in byname:
                     continue
@@ -500,8 +511,27 @@ class MyAgent(Agent):
                     dx = -1.0 if dn == "left" else (1.0 if dn == "right" else 0.0)
                 q = abs((cy + dy) - tgt[0]) + abs((cx + dx) - tgt[1])
                 if best_q is None or q < best_q - 0.01 or (abs(q - best_q) < 0.01 and self._act_use[nm] < self._act_use[best_a]):
-                    best_q, best_a = q, nm
+                    best_q, best_a, best_dn = q, nm, dn
             if best_a is not None:
+                if best_dn == self._nav_last_dir:
+                    self._nav_same_dir += 1
+                else:
+                    self._nav_same_dir = 0
+                    self._nav_last_dir = best_dn
+                try:
+                    self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": best_dn, "same": self._nav_same_dir}
+                except Exception:
+                    pass
+                if self._nav_same_dir >= 15:
+                    self._nav_same_dir = 0
+                    for nm in sorted(self._nav_interact, key=lambda n: self._act_use[n]):
+                        if nm in byname and (h is None or (h, nm, -1, -1) not in self._pair_seen):
+                            if h is not None:
+                                self._pair_seen.add((h, nm, -1, -1))
+                            self._act_use[nm] += 1
+                            self._sk_clicks += 1
+                            self._record_choice(h, (nm, -1, -1))
+                            return byname[nm]
                 self._act_use[best_a] += 1
                 self._record_choice(h, (best_a, -1, -1))
                 return byname[best_a]
