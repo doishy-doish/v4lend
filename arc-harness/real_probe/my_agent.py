@@ -255,6 +255,7 @@ class MyAgent(Agent):
         self._probe_last = None
         self._probe_done = False
         self._probe_cnt = {}
+        self._nav_scores = []
         self._csweep = None
         self._cbest = None
         self._cbest_score = -1
@@ -281,7 +282,7 @@ class MyAgent(Agent):
                 "m5phase": self._m5phase, "best_click": self._best_click,
                 "nav_cursor": self._nav_cursor, "nav_arrows": dict(self._nav_arrows),
                 "nav_interact": list(self._nav_interact), "cbest": self._cbest,
-                "cbest_score": self._cbest_score,
+                "cbest_score": self._cbest_score, "nav_scores": self._nav_scores,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -366,14 +367,18 @@ class MyAgent(Agent):
                     self._m5phase = "nav"
                     try:
                         best_c, best_d = None, 0.01
+                        _scored = []
                         for c, ent in self._probe_disp.items():
                             if c == self._nav_bg or c == 0:
                                 continue
                             for _nm, _v in ent.items():
                                 _cnt = self._probe_cnt.get((c, _nm), 50)
                                 _s = (abs(_v[0]) + abs(_v[1])) / (1.0 + _cnt)
+                                _scored.append((_s, c, _nm))
                                 if _s > best_d:
                                     best_d, best_c = _s, c
+                        _scored.sort(reverse=True)
+                        self._nav_scores = [[round(float(s), 4), int(c), str(n)] for s, c, n in _scored[:5]]
                         self._nav_cursor = best_c
                         self._nav_arrows = {}
                         self._nav_steps = {}
@@ -517,6 +522,7 @@ class MyAgent(Agent):
                 self._cbest_score = score
                 self._cbest = self._cpending[1]
             self._cpending = None
+            self._need_reset = False
         if not self._csweep:
             if self._cbest is None:
                 return None
