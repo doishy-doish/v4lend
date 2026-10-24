@@ -1,4 +1,6 @@
+import os
 import random
+import zlib
 from collections import Counter
 
 from arcengine import FrameData, GameAction, GameState
@@ -316,6 +318,102 @@ class MyAgent(Agent):
         self._nav_last = None
         self._nav_same_dir = 0
         self._nav_last_dir = None
+        self._scal = []
+        self._ff = {}
+        self._prev_gate = None
+        self._prev_gate_nz = None
+
+    def _snap(self, grid):
+        d = {}
+        try:
+            pa = self._prev_sig[0] if self._prev_sig else "-"
+            if "::" in pa:
+                pa = pa.split("::")[-1]
+            d["pa"] = pa
+        except Exception:
+            d["pa"] = "?"
+        try:
+            gid = self._game_id
+        except Exception:
+            gid = ""
+        if gid == "sk48":
+            try:
+                cur = _sk_cursor(grid)
+                d["cy"] = cur[0] if cur else -1
+            except Exception:
+                d["cy"] = -1
+            try:
+                tip = 0
+                top = min(len(grid), SK48_STRIP_Y)
+                cy = d.get("cy", -1)
+                y0 = max(0, cy - 2) if cy >= 0 else 0
+                y1 = min(top, cy + 3) if cy >= 0 else top
+                for _yy in range(y0, y1):
+                    _row = grid[_yy]
+                    for _xx in range(len(_row)):
+                        if _row[_xx] == 1 and _xx > tip:
+                            tip = _xx
+                d["tip"] = tip
+            except Exception:
+                d["tip"] = -1
+            try:
+                blocks = _sk_blocks(grid)
+                tc = self._skf_order[self._skf_ti] if self._skf_order and self._skf_ti < len(self._skf_order) else None
+                if tc is not None and tc in blocks:
+                    d["tx"] = blocks[tc][1]
+                    d["tb"] = blocks[tc][2]
+                    d["tc"] = tc
+                else:
+                    d["tx"] = -1
+                    d["tb"] = -1
+                    d["tc"] = -1
+            except Exception:
+                d["tx"] = -1
+            try:
+                d["bar"] = int(round(self._barfill * 100))
+            except Exception:
+                d["bar"] = -1
+        elif not self._simple_only:
+            try:
+                gid2 = self._gate_id(grid)
+                gh = zlib.crc32(str(gid2).encode()) & 0xffff if gid2 is not None else -1
+                d["gh"] = gh
+            except Exception:
+                d["gh"] = -1
+        else:
+            try:
+                cent = self._centroids(grid)
+                c = self._nav_cursor
+                if c is not None and c in cent:
+                    d["cxy"] = [round(float(cent[c][0]), 1), round(float(cent[c][1]), 1)]
+                else:
+                    d["cxy"] = [-1, -1]
+            except Exception:
+                d["cxy"] = [-1, -1]
+        return d
+
+    def _forced_fire(self):
+        d = {}
+        try:
+            d["menv"] = bool(os.environ.get("MODEL_PATH", ""))
+        except Exception:
+            d["menv"] = False
+        try:
+            import sys as _sys
+            d["py"] = _sys.version.split()[0]
+        except Exception as _e:
+            d["py"] = "ERR:" + str(_e)[:40]
+        try:
+            import torch as _torch
+            d["torch"] = getattr(_torch, "__version__", "?")
+        except Exception as _e:
+            d["torch"] = "ERR:" + str(_e)[:60]
+        try:
+            import transformers as _tf
+            d["tf"] = getattr(_tf, "__version__", "?")
+        except Exception as _e:
+            d["tf"] = "ERR:" + str(_e)[:60]
+        return d
 
     def is_done(self, frames, latest_frame):
         return latest_frame.state is GameState.WIN
@@ -341,6 +439,7 @@ class MyAgent(Agent):
                 "bfs": [len(self._bfs_queue), self._bfs_i, len(self._bfs_seen), self._bfs_win],
                 "sk_trace": self._sk_trace,
                 "combo_win": self._combo_win, "combo_done": self._combo_i,
+                "scal": self._scal, "ff": self._ff,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
     def _record_choice(self, h, sig):
@@ -1128,6 +1227,19 @@ class MyAgent(Agent):
             self._barfill = round(_g2 / float(_g2 + _r2), 3) if (_g2 + _r2) else 0.0
         except Exception:
             pass
+        if grid is not None and len(self._scal) < 250:
+            try:
+                _sd = self._snap(grid)
+                _sd["t"] = self._turns
+                _sd["lc"] = self._best_lc
+                self._scal.append(_sd)
+            except Exception:
+                pass
+        if self._turns == 10 and not self._ff:
+            try:
+                self._ff = self._forced_fire()
+            except Exception as _e:
+                self._ff = {"err": str(_e)[:80]}
         cands = [a for a in avail if a is not GameAction.RESET]
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
