@@ -1,0 +1,26 @@
+name: arc-real-game
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        default: ls20
+      max_steps:
+        default: "30"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q arc-agi && (pip install -q arcengine || true)
+      - run: git clone --depth 1 https://github.com/arcprize/ARC-AGI-3-Agents.git vendor/ARC-AGI-3-Agents
+      - run: cd arc-harness/real_probe && python3 driver.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-game-probe
+          path: arc-harness/real_probe/probe-results.json
+          if-no-files-found: warn
