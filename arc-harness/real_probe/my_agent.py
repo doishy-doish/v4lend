@@ -272,6 +272,12 @@ class MyAgent(Agent):
         self._combo_eval = 0
         self._combo_win = None
         self._simple_only = False
+        self._skf_phase = "aim"
+        self._skf_order = None
+        self._skf_ti = 0
+        self._skf_fires = 0
+        self._skf_tip = 0
+        self._skf_stag = 0
         self._probe_last = None
         self._probe_done = False
         self._probe_samples = {}
@@ -285,6 +291,7 @@ class MyAgent(Agent):
         self._cpending = None
         self._cpre = None
         self._cpre_grid = None
+        self._ctop = []
         self._csweep_all = []
         self._cexploit_n = 0
         self._cpair = []
@@ -318,6 +325,8 @@ class MyAgent(Agent):
                 "barfill": self._barfill, "nav_last": self._nav_last,
                 "nav_avoid": sorted(self._nav_avoid),
                 "nav_steps": {k: [round(float(v[0]), 2), round(float(v[1]), 2)] for k, v in self._nav_steps.items()},
+                "sk_mode": self._skf_phase, "sk_ti": self._skf_ti, "sk_tip": self._skf_tip,
+                "ctop": [[int(s), list(p)] for s, p in self._ctop[:4]],
                 "combo_win": self._combo_win, "combo_done": self._combo_i,
                 "sk_move2": {k: [round(float(x), 2), round(float(y), 2)] for k, (x, y) in self._sk_move2.items()}}
 
@@ -620,14 +629,14 @@ class MyAgent(Agent):
             return None
         if self._csweep is None:
             pts = []
-            for gy in range(0, 64, 16):
-                for gx in range(0, 64, 16):
-                    pts.append((gx, gy))
             try:
                 for t in _targets(grid)[:16]:
                     pts.append((t[1], t[0]))
             except Exception:
                 pass
+            for gy in range(0, 64, 32):
+                for gx in range(0, 64, 32):
+                    pts.append((gx, gy))
             seen = set()
             uniq = []
             for p in pts:
@@ -655,6 +664,12 @@ class MyAgent(Agent):
             if score > self._cbest_score:
                 self._cbest_score = score
                 self._cbest = self._cpending[1]
+            try:
+                self._ctop.append((score, self._cpending[1]))
+                self._ctop.sort(reverse=True)
+                self._ctop = self._ctop[:6]
+            except Exception:
+                pass
             self._cpending = None
             self._need_reset = False
         if not self._csweep:
@@ -663,7 +678,13 @@ class MyAgent(Agent):
             self._cexploit_n += 1
             if self._cpair or (self._cexploit_n >= 25 and self._csweep_all):
                 if not self._cpair:
-                    _short = [p for p in self._csweep_all[:10] if p != self._cbest]
+                    try:
+                        _short = [p for s, p in self._ctop[1:5] if p != self._cbest]
+                    except Exception:
+                        _short = []
+                    if len(_short) < 3:
+                        _short += [p for p in self._csweep_all[:10] if p != self._cbest and p not in _short]
+                    _short = _short[:4]
                     self._cpair = [(self._cbest, p) for p in _short]
                     self._cpair_i = 0
                     self._cpair_stage = 0
@@ -772,6 +793,91 @@ class MyAgent(Agent):
         self._record_choice(h, (nm, -1, -1))
         return byname[nm]
 
+    def _sk48_fire(self, grid, h, simple, six):
+        byname = {}
+        for a in simple:
+            byname.setdefault(str(a), a)
+        if "GameAction.ACTION1" not in byname or "GameAction.ACTION2" not in byname:
+            return None
+        if self._skf_order is None:
+            try:
+                seq = [c for c in _sk_strip_order(grid) if c in SK48_BLOCK_COLORS]
+            except Exception:
+                seq = []
+            if not seq:
+                seq = [8, 6, 14, 9]
+            self._skf_order = [c for c in seq if c in (8, 6, 14, 9)]
+            if not self._skf_order:
+                self._skf_order = [8, 9]
+            self._skf_ti = 0
+            self._skf_phase = "aim"
+            self._skf_fires = 0
+            self._skf_stag = 0
+        try:
+            blocks = _sk_blocks(grid)
+        except Exception:
+            return None
+        while self._skf_ti < len(self._skf_order) and self._skf_order[self._skf_ti] not in blocks:
+            self._skf_ti += 1
+        if self._skf_ti >= len(self._skf_order):
+            return None
+        tc = self._skf_order[self._skf_ti]
+        cur = _sk_cursor(grid)
+        if cur is None:
+            return None
+        cy = cur[0]
+        try:
+            _ty, _tx, _ta = blocks[tc]
+        except Exception:
+            self._skf_ti += 1
+            return None
+        if self._skf_phase == "aim":
+            if cy < _ty - 1:
+                nm = "GameAction.ACTION2"
+            elif cy > _ty + 1:
+                nm = "GameAction.ACTION1"
+            else:
+                self._skf_phase = "fire"
+                self._skf_fires = 0
+                self._skf_stag = 0
+                self._skf_tip = 0
+                nm = None
+            if nm is not None and nm in byname:
+                self._act_use[nm] += 1
+                self._record_choice(h, (nm, -1, -1))
+                return byname[nm]
+            if nm is not None:
+                return None
+        if self._skf_phase == "fire":
+            try:
+                _tip = 0
+                for _yy in range(max(0, cy - 2), min(len(grid), cy + 3)):
+                    _row = grid[_yy]
+                    for _xx in range(len(_row)):
+                        if _row[_xx] == 1 and _xx > _tip:
+                            _tip = _xx
+                if _tip > self._skf_tip:
+                    self._skf_tip = _tip
+                    self._skf_stag = 0
+                else:
+                    self._skf_stag += 1
+            except Exception:
+                pass
+            self._sk_target = tc
+            if self._skf_fires >= 12 or self._skf_stag >= 3:
+                self._skf_ti += 1
+                self._skf_phase = "aim"
+                self._skf_fires = 0
+                self._skf_stag = 0
+                return None
+            if "GameAction.ACTION4" in byname:
+                self._skf_fires += 1
+                self._sk_clicks += 1
+                self._record_choice(h, ("GameAction.ACTION4", -1, -1))
+                return byname["GameAction.ACTION4"]
+            return None
+        return None
+
     def _replay_pick(self, cands, h):
         while self._replay:
             nm, x, y = self._replay[0]
@@ -817,6 +923,11 @@ class MyAgent(Agent):
             self._combo_pairs = None
             self._combo_i = 0
             self._combo_stage = 0
+            self._skf_order = None
+            self._skf_ti = 0
+            self._skf_phase = "aim"
+            self._skf_fires = 0
+            self._skf_stag = 0
             if not self._expect_reset:
                 self._replay = None
             self._expect_reset = False
@@ -933,6 +1044,10 @@ class MyAgent(Agent):
                 return hit
         if grid and (simple or six):
             try:
+                if getattr(self, "_game_id", "") == "sk48":
+                    _sf = self._sk48_fire(grid, h, simple, six)
+                    if _sf is not None:
+                        return _sf
                 if simple:
                     sk_hit = self._nav_pick(grid, h, simple, six, cands)
                 else:
