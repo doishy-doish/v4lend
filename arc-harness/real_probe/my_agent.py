@@ -1991,6 +1991,10 @@ class MyAgent(Agent):
                 self._ff = self._forced_fire()
             except Exception as _e:
                 self._ff = {"err": str(_e)[:80]}
+        cands = [a for a in avail if a is not GameAction.RESET]
+        simple = [a for a in cands if not _complex(a)]
+        six = [a for a in cands if _complex(a)]
+        self._simple_only = bool(simple) and not six
         try:
             _advfn = getattr(self, "_advisor", None)
         except Exception:
@@ -2002,10 +2006,7 @@ class MyAgent(Agent):
                 _adv_act = None
             if _adv_act is not None:
                 return _adv_act
-        cands = [a for a in avail if a is not GameAction.RESET]
-        simple = [a for a in cands if not _complex(a)]
-        six = [a for a in cands if _complex(a)]
-        self._simple_only = bool(simple) and not six
+
         if len(self._sk_trace) < 60:
             try:
                 self._sk_trace.append([self._turns, self._skf_phase, ",".join(sorted(str(a) for a in simple))])
