@@ -1,0 +1,42 @@
+name: arc-summarize
+on:
+  workflow_dispatch:
+    inputs:
+      run_ids:
+        description: "Comma-separated run ids"
+        default: ""
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and summarize
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_IDS: ${{ inputs.run_ids }}
+        run: |
+          set -e
+          mkdir -p art
+          for ID in $(echo "$RUN_IDS" | tr ',' ' '); do
+            gh run download "$ID" -n real-game-probe -D "art/$ID" --repo "$GITHUB_REPOSITORY"
+          done
+          python3 - <<'PYEOF' > summary.md
+          import json, glob
+          print("# v7.29 probe summaries")
+          print("")
+          print("| run | game | levels | actions | wall_s | clicks | combo | best_lc | nav_dir | td |")
+          print("|---|---|---|---|---|---|---|---|---|---|")
+          for p in sorted(glob.glob("art/*/probe-results.json")):
+              j = json.load(open(p))
+              h = j.get("harness", {}) or {}
+              nl = h.get("nav_last", {}) or {}
+              print("| " + p.split("/")[1] + " | " + str(j.get("game")) + " | " + str(j.get("levels")) + " | " + str(j.get("actions")) + " | " + str(j.get("wall_s")) + " | " + str(h.get("sk_clicks")) + " | " + str(h.get("combo_done")) + " | " + str(h.get("best_lc")) + " | " + str(nl.get("dir")) + " | " + str(nl.get("td")) + " |")
+          print("")
+          PYEOF
+          cat summary.md
+          gh issue create --title "v7.29 probe summaries" --body-file summary.md --repo "$GITHUB_REPOSITORY"
