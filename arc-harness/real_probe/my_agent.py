@@ -934,10 +934,7 @@ class MyAgent(Agent):
                             self._record_choice(h, (nm, -1, -1))
                             try:
                                 self._nav_last = {"tc": int(tc), "near": round(float(bestd), 2)}
-                            try:
                                 self._near_int = int(getattr(self, "_near_int", 0)) + 1
-                            except Exception:
-                                pass
                             except Exception:
                                 pass
                             return byname[nm]
@@ -980,10 +977,7 @@ class MyAgent(Agent):
                                 _td29 = -1
                             try:
                                 self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": "ram:" + str(_ramdn), "td": _td29}
-                            try:
                                 self._td_hist = list(getattr(self, "_td_hist", []))[-40:] + [_td29]
-                            except Exception:
-                                pass
                             except Exception:
                                 pass
                             if int(getattr(self, "_ls_arr", 0)) > 7:
@@ -1657,10 +1651,10 @@ class MyAgent(Agent):
                         self._act_use[_nme] += 1
                         self._sk_clicks += 1
                         self._record_choice(h, (_nme, _ex29, _ey29))
-                            try:
-                                self._fam_use[int(_fam29)] += 1
-                            except Exception:
-                                pass
+                        try:
+                            self._fam_use[int(_fam29)] += 1
+                        except Exception:
+                            pass
                         return _ae
                 if "GameAction.ACTION4" in byname:
                     self._skf_fires += 1
