@@ -1,0 +1,44 @@
+name: arc-model-game
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        default: vc33
+      max_steps:
+        default: "30"
+      model:
+        default: "35"
+      bestof:
+        default: "1"
+      grammar:
+        default: "on"
+      anneal:
+        default: "on"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q arc-agi pydantic huggingface_hub && (pip install -q arcengine || true) && pip install -q llama-cpp-python
+      - run: git clone --depth 1 https://github.com/arcprize/ARC-AGI-3-Agents.git vendor/ARC-AGI-3-Agents
+      - run: cp arc-harness/real_probe/model_driver.py ./_md.py
+      - name: Download model
+        env:
+          MODEL: ${{ inputs.model }}
+        run: |
+          if [ "$MODEL" = "30" ]; then python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-GGUF', allow_patterns=['Qwen3-4B-Q4_K_M.gguf'], local_dir='m')"; echo "m/Qwen3-4B-Q4_K_M.gguf" > .mpath;
+          else python3 -c "from huggingface_hub import snapshot_download; snapshot_download('unsloth/Qwen3.5-4B-GGUF', allow_patterns=['Qwen3.5-4B-Q4_K_M.gguf'], local_dir='m')"; echo "m/Qwen3.5-4B-Q4_K_M.gguf" > .mpath; fi
+          ls -la m/
+      - run: cd arc-harness/real_probe && timeout 1500 python3 ../../_md.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}" --model "../../$(cat ../../.mpath)" --bestof "${{ inputs.bestof }}" --grammar "${{ inputs.grammar }}" --anneal "${{ inputs.anneal }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-game-probe
+          path: |
+            arc-harness/real_probe/probe-results.json
+            arc-harness/real_probe/model-stats.json
+          if-no-files-found: warn
