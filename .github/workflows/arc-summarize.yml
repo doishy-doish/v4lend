@@ -12,7 +12,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Fetch and summarize
@@ -22,13 +21,10 @@ jobs:
           RUN_IDS: ${{ inputs.run_ids }}
         run: |
           mkdir -p art
-          echo "## fetch log" > summary.md
           for ID in $(echo "$RUN_IDS" | tr ',' ' '); do
-            echo "### run $ID" >> summary.md
-            gh run download "$ID" -n real-game-probe -D "art/$ID" --repo "$GITHUB_REPOSITORY" >> summary.md 2>&1 || echo "DOWNLOAD-FAILED $ID $?" >> summary.md
-            ls -la "art/$ID" >> summary.md 2>&1 || true
+            gh run download "$ID" -n real-game-probe -D "art/$ID" --repo "$GITHUB_REPOSITORY" > "fetch-$ID.log" 2>&1 || echo "DOWNLOAD-FAILED $ID" > "fetch-$ID.log"
           done
-          python3 - <<'PYEOF' >> summary.md 2>&1
+          python3 - <<'PYEOF' > summary.md 2> pyerr.log
           import json, glob
           print("# v7.29 probe summaries")
           print("")
@@ -42,9 +38,9 @@ jobs:
           print("")
           PYEOF
           cat summary.md
-      - name: Report issue
-        if: always()
+      - name: Commit summary
         env:
           GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
         run: |
-          gh issue create --title "v7.29 probe summaries" --body-file summary.md --repo "$GITHUB_REPOSITORY" || gh issue create --title "v7.29 probe summaries (fallback)" --body "fetch step failed, see run logs" --repo "$GITHUB_REPOSITORY"
+          B64=$(base64 -w0 summary.md)
+          gh api "repos/$GITHUB_REPOSITORY/contents/results/v729-summary.md" --method PUT -f message="v7.29 probe summaries" -f content="$B64" --jq .content.sha
