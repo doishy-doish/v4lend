@@ -919,6 +919,19 @@ class MyAgent(Agent):
                 d_stall = int(getattr(self, "_ls_stall", 0))
             except Exception:
                 d_stall = 0
+            try:
+                if bestd is not None and bestd < 6.0 and int(getattr(self, "_turns", 0)) % 3 == 0:
+                    for nm in sorted(self._nav_interact, key=lambda n: self._act_use[n]):
+                        if nm in byname:
+                            self._act_use[nm] += 1
+                            self._record_choice(h, (nm, -1, -1))
+                            try:
+                                self._nav_last = {"tc": int(tc), "near": round(float(bestd), 2)}
+                            except Exception:
+                                pass
+                            return byname[nm]
+            except Exception:
+                pass
             if (bestd is not None and bestd < 1.6) or d_stall >= 6:
                 try:
                     self._ls_arr = int(getattr(self, "_ls_arr", 0)) + 1
@@ -926,13 +939,36 @@ class MyAgent(Agent):
                     self._ls_arr = 1
                 try:
                     _ramdn = getattr(self, "_ls_ram", None)
+                    try:
+                        _rkeys29 = [dn for dn in self._nav_arrows.keys()]
+                    except Exception:
+                        _rkeys29 = []
+                    if _rkeys29:
+                        try:
+                            _ramdn = _rkeys29[int(getattr(self, "_ls_arr", 0)) % len(_rkeys29)]
+                        except Exception:
+                            pass
                     if int(getattr(self, "_ls_arr", 0)) > 2 and _ramdn is not None:
                         _ramnm = self._nav_arrows.get(_ramdn)
                         if _ramnm is not None and _ramnm in byname:
                             self._act_use[_ramnm] += 1
                             self._record_choice(h, (_ramnm, -1, -1))
                             try:
-                                self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": "ram:" + str(_ramdn)}
+                                _pt29 = getattr(self, "_ls_ram_tgt", None)
+                                _td29 = -1
+                                try:
+                                    if _pt29 is not None and tgt is not None:
+                                        _td29 = abs(int(tgt[0]) - int(_pt29[0])) + abs(int(tgt[1]) - int(_pt29[1]))
+                                except Exception:
+                                    _td29 = -1
+                                try:
+                                    self._ls_ram_tgt = [int(tgt[0]), int(tgt[1])] if tgt is not None else None
+                                except Exception:
+                                    pass
+                            except Exception:
+                                _td29 = -1
+                            try:
+                                self._nav_last = {"tc": int(tc), "cy": round(float(cy), 1), "cx": round(float(cx), 1), "tgt": [int(tgt[0]), int(tgt[1])], "bestd": round(float(bestd), 2) if bestd is not None else -1, "dir": "ram:" + str(_ramdn), "td": _td29}
                             except Exception:
                                 pass
                             if int(getattr(self, "_ls_arr", 0)) > 7:
@@ -1140,6 +1176,19 @@ class MyAgent(Agent):
                 if p not in seen:
                     seen.add(p)
                     uniq.append(p)
+            _extra29 = [(61, 33), (61, 33), (61, 33)]
+            try:
+                for _ex29 in range(0, 64, 8):
+                    _extra29.append((_ex29, 0))
+                for _ey29 in (44, 50, 56, 62):
+                    for _ex29 in (0, 16, 32, 48, 63):
+                        _extra29.append((_ex29, _ey29))
+            except Exception:
+                pass
+            for _q29 in _extra29:
+                if _q29 not in seen:
+                    seen.add(_q29)
+                    uniq.append(_q29)
             self._csweep = uniq
             self._csweep_all = list(uniq)
             self._need_reset = True
@@ -1280,7 +1329,7 @@ class MyAgent(Agent):
                     if self._bfs_win is None and _rs < 8 and self._bfs_turns < 1200:
                         try:
                             self._bfs_restarts = _rs + 1
-                            self._bfs_queue = [[c] for c in self._gate_clicks[:8]]
+                            self._bfs_queue = [[[61, 33], [61, 33], [61, 33]]] + [[c] for c in self._gate_clicks[:8]]
                             self._bfs_i = 0
                             self._bfs_j = -1
                             self._bfs_lastc = None
@@ -1492,6 +1541,10 @@ class MyAgent(Agent):
             except Exception:
                 _contact = False
             self._sk_target = tc
+            try:
+                _fam29 = int(self._skf_ti) % 4
+            except Exception:
+                _fam29 = 0
             if self._skf_stage == 0:
                 if _tip > self._skf_tip:
                     self._skf_tip = _tip
@@ -1511,15 +1564,32 @@ class MyAgent(Agent):
                         except Exception:
                             pass
                         _a0 = six[0]
+                        _ox29, _oy29 = _tx, _ty
                         try:
-                            _a0.set_data({"x": _tx, "y": _ty})
+                            if _fam29 == 1:
+                                _ox29, _oy29 = _tip, cy
+                            elif _fam29 == 2 and cur is not None:
+                                _ox29, _oy29 = cur[1], cur[0]
+                            elif _fam29 == 3:
+                                for _sy29 in range(44, len(grid)):
+                                    for _sx29 in range(len(grid[_sy29])):
+                                        if grid[_sy29][_sx29] == tc:
+                                            _ox29, _oy29 = _sx29, _sy29
+                                            break
+                                    else:
+                                        continue
+                                    break
+                        except Exception:
+                            _ox29, _oy29 = _tx, _ty
+                        try:
+                            _a0.set_data({"x": _ox29, "y": _oy29})
                         except Exception:
                             _a0 = None
                         if _a0 is not None:
                             _nmc0 = str(_a0)
                             self._act_use[_nmc0] += 1
                             self._sk_clicks += 1
-                            self._record_choice(h, (_nmc0, _tx, _ty))
+                            self._record_choice(h, (_nmc0, _ox29, _oy29))
                             return _a0
                     self._skf_stage = 1
                     self._skf_fires = 0
@@ -1533,15 +1603,32 @@ class MyAgent(Agent):
                     self._skf_stage = 2
                     self._skf_fires = 0
                     _ae = six[0]
+                    _ex29, _ey29 = _tx, _ty
                     try:
-                        _ae.set_data({"x": _tx, "y": _ty})
+                        if _fam29 == 1:
+                            _ex29, _ey29 = _tip, cy
+                        elif _fam29 == 2 and cur is not None:
+                            _ex29, _ey29 = cur[1], cur[0]
+                        elif _fam29 == 3:
+                            for _sy29 in range(44, len(grid)):
+                                for _sx29 in range(len(grid[_sy29])):
+                                    if grid[_sy29][_sx29] == tc:
+                                        _ex29, _ey29 = _sx29, _sy29
+                                        break
+                                else:
+                                    continue
+                                break
+                    except Exception:
+                        _ex29, _ey29 = _tx, _ty
+                    try:
+                        _ae.set_data({"x": _ex29, "y": _ey29})
                     except Exception:
                         _ae = None
                     if _ae is not None:
                         _nme = str(_ae)
                         self._act_use[_nme] += 1
                         self._sk_clicks += 1
-                        self._record_choice(h, (_nme, _tx, _ty))
+                        self._record_choice(h, (_nme, _ex29, _ey29))
                         return _ae
                 if "GameAction.ACTION4" in byname:
                     self._skf_fires += 1
@@ -1603,13 +1690,34 @@ class MyAgent(Agent):
                 if _nm2 == "clickblock" and six:
                     _a = six[0]
                     try:
-                        _a.set_data({"x": _tx, "y": _ty})
+                        _fam29 = int(self._skf_ti) % 4
+                    except Exception:
+                        _fam29 = 0
+                    _bx29, _by29 = _tx, _ty
+                    try:
+                        if _fam29 == 1:
+                            _bx29, _by29 = _tip, cy
+                        elif _fam29 == 2 and cur is not None:
+                            _bx29, _by29 = cur[1], cur[0]
+                        elif _fam29 == 3:
+                            for _sy29 in range(44, len(grid)):
+                                for _sx29 in range(len(grid[_sy29])):
+                                    if grid[_sy29][_sx29] == tc:
+                                        _bx29, _by29 = _sx29, _sy29
+                                        break
+                                else:
+                                    continue
+                                break
+                    except Exception:
+                        _bx29, _by29 = _tx, _ty
+                    try:
+                        _a.set_data({"x": _bx29, "y": _by29})
                     except Exception:
                         return None
                     _nmc = str(_a)
                     self._act_use[_nmc] += 1
                     self._sk_clicks += 1
-                    self._record_choice(h, (_nmc, _tx, _ty))
+                    self._record_choice(h, (_nmc, _bx29, _by29))
                     return _a
                 if _nm2 in byname:
                     self._act_use[_nm2] += 1
