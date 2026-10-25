@@ -16,16 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fetch and summarize
+        id: fetch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_IDS: ${{ inputs.run_ids }}
         run: |
-          set -e
           mkdir -p art
+          echo "## fetch log" > summary.md
           for ID in $(echo "$RUN_IDS" | tr ',' ' '); do
-            gh run download "$ID" -n real-game-probe -D "art/$ID" --repo "$GITHUB_REPOSITORY"
+            echo "### run $ID" >> summary.md
+            gh run download "$ID" -n real-game-probe -D "art/$ID" --repo "$GITHUB_REPOSITORY" >> summary.md 2>&1 || echo "DOWNLOAD-FAILED $ID $?" >> summary.md
+            ls -la "art/$ID" >> summary.md 2>&1 || true
           done
-          python3 - <<'PYEOF' > summary.md
+          python3 - <<'PYEOF' >> summary.md 2>&1
           import json, glob
           print("# v7.29 probe summaries")
           print("")
@@ -39,4 +42,9 @@ jobs:
           print("")
           PYEOF
           cat summary.md
-          gh issue create --title "v7.29 probe summaries" --body-file summary.md --repo "$GITHUB_REPOSITORY"
+      - name: Report issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "v7.29 probe summaries" --body-file summary.md --repo "$GITHUB_REPOSITORY" || gh issue create --title "v7.29 probe summaries (fallback)" --body "fetch step failed, see run logs" --repo "$GITHUB_REPOSITORY"
