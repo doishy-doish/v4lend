@@ -76,7 +76,7 @@ def _segments(grid):
     return segs
 
 
-def _targets(grid):
+def _targets(grid, merge_cols=False):
     def key(s):
         y1, x1, y2, x2 = s["bbox"]
         w = x2 - x1 + 1
@@ -85,6 +85,28 @@ def _targets(grid):
         sal = s["color"] in SALIENT
         return (0 if (sal and med) else 1 if med else 2 if sal else 3, -s["area"])
     segs = sorted(_segments(grid), key=key)
+    if merge_cols:
+        try:
+            _merged = []
+            for _s in segs:
+                if _s["area"] < 2:
+                    continue
+                _y1, _x1, _y2, _x2 = _s["bbox"]
+                _placed = False
+                for _m in _merged:
+                    _my1, _mx1, _my2, _mx2 = _m["bbox"]
+                    if not (_x2 < _mx1 or _x1 > _mx2):
+                        if _s["area"] > _m["area"]:
+                            _m["bbox"] = _s["bbox"]
+                            _m["area"] = _s["area"]
+                            _m["color"] = _s["color"]
+                        _placed = True
+                        break
+                if not _placed:
+                    _merged.append(dict(_s))
+            segs = _merged
+        except Exception:
+            pass
     out = []
     for s in segs:
         if s["area"] < 2:
@@ -396,6 +418,22 @@ class MyAgent(Agent):
         self._ff = {}
         self._prev_gate = None
         self._prev_gate_nz = None
+        try:
+            self._variant = str(os.environ.get("DUCK_VARIANT", "base")).strip().lower()
+        except Exception:
+            self._variant = "base"
+        self._vlvl = {"base": 0, "b2": 1, "b2b3": 2, "b2b3b4": 3}.get(self._variant, 0)
+        self._v_global_tried = set()
+        self._v_last_resweep = -1000
+        self._v_b4_evals = 0
+        self._v_b4_overrides = 0
+        self._v_b4_breaks = 0
+        self._v_b4_armed = False
+        if self._vlvl >= 3:
+            try:
+                self._advisor = self._dual_advisor
+            except Exception:
+                pass
 
     def _snap(self, grid):
         d = {}
@@ -622,6 +660,8 @@ class MyAgent(Agent):
                 "target_use": {"%d,%d" % k: v for k, v in self._target_use.items()}, "noop": dict(self._noop_count),
                 "pairs_tried": len(self._pair_seen), "backtracks": self._backtracks,
                 "effective": sorted(self._effective), "snaps": len(self._snaps),
+                "variant": getattr(self, "_variant", "base"), "vglob": len(getattr(self, "_v_global_tried", set())),
+                "b4": [int(getattr(self, "_v_b4_evals", 0)), int(getattr(self, "_v_b4_overrides", 0)), int(getattr(self, "_v_b4_breaks", 0))],
                 "sk_target": self._sk_target, "sk_clicks": self._sk_clicks,
                 "sk_move": dict(self._sk_move), "wins": len(self._wins), "best_lc": self._best_lc,
                 "m5phase": self._m5phase, "best_click": self._best_click,
@@ -647,6 +687,11 @@ class MyAgent(Agent):
         self._prev_h = h
         self._prev_sig = sig
         self._prefix.append(sig)
+        try:
+            if sig is not None and len(sig) > 2:
+                self._v_global_tried.add((sig[0], sig[1], sig[2]))
+        except Exception:
+            pass
         try:
             if sig is not None and len(sig) > 2 and sig[1] != -1:
                 try:
@@ -716,6 +761,16 @@ class MyAgent(Agent):
         byname = {}
         for a in simple:
             byname.setdefault(str(a), a)
+        try:
+            _v_reprobe = (getattr(self, "_vlvl", 0) >= 1 and self._m5phase == "nav"
+                          and not self._sweep
+                          and (self._stall >= STALL_FORCE_SIMPLE or self._since_novel >= 25))
+        except Exception:
+            _v_reprobe = False
+        if _v_reprobe:
+            self._m5phase = "learn"
+            self._sweep = []
+            self._probe_done = False
         if self._m5phase == "learn":
             if not self._sweep and not self._probe_done:
                 self._sweep = [n for n in names for _ in range(5)]
@@ -1169,10 +1224,17 @@ class MyAgent(Agent):
                 self._need_reset = True
         except Exception:
             pass
+        try:
+            if getattr(self, "_vlvl", 0) >= 1 and self._csweep is not None and self._cpending is None:
+                if (self._stall >= STALL_ROTATE or self._since_novel >= 25) and (self._turns - getattr(self, "_v_last_resweep", -1000)) > 25:
+                    self._csweep = None
+                    self._v_last_resweep = self._turns
+        except Exception:
+            pass
         if self._csweep is None:
             pts = []
             try:
-                for t in _targets(grid)[:16]:
+                for t in _targets(grid, merge_cols=getattr(self, "_vlvl", 0) >= 2)[:16]:
                     pts.append((t[1], t[0]))
             except Exception:
                 pass
@@ -1820,6 +1882,65 @@ class MyAgent(Agent):
                 return None
         return None
 
+    def _dual_advisor(self, h, grid, simple, six, cands):
+        try:
+            self._v_b4_evals += 1
+        except Exception:
+            pass
+        try:
+            if self._v_b4_armed and h is not None and self._visited.get(h, 0) <= 1:
+                self._v_b4_breaks += 1
+                self._v_b4_armed = False
+        except Exception:
+            pass
+        try:
+            _hard = (self._stall >= BACKTRACK_STALL) or (self._since_novel >= 25)
+        except Exception:
+            _hard = False
+        if not _hard:
+            return None
+        try:
+            if simple:
+                _byname = {}
+                for _a in simple:
+                    _byname.setdefault(str(_a), _a)
+                for _n in sorted(_byname, key=lambda n: (self._act_use.get(n, 0), n)):
+                    if (_n, -1, -1) not in self._v_global_tried:
+                        _a = _byname[_n]
+                        self._act_use[_n] += 1
+                        self._record_choice(h, (_n, -1, -1))
+                        self._v_b4_overrides += 1
+                        self._v_b4_armed = True
+                        return _a
+            if grid and six:
+                _tg = _targets(grid, merge_cols=self._vlvl >= 2)
+                _scored = []
+                for (_y, _x) in _tg:
+                    for _a in six:
+                        _nm = str(_a)
+                        if (_nm, _x, _y) in self._v_global_tried:
+                            continue
+                        _scored.append((self._act_use.get(_nm, 0), self._target_use.get((_y, _x), 0), (_y, _x), _a))
+                if _scored:
+                    _scored.sort(key=lambda t: (t[0], t[1]))
+                    _, _, (_y, _x), _a = _scored[0]
+                    try:
+                        _a.set_data({"x": _x, "y": _y})
+                    except Exception:
+                        return None
+                    _nm = str(_a)
+                    if h is not None:
+                        self._pair_seen.add((h, _nm, _x, _y))
+                    self._act_use[_nm] += 1
+                    self._target_use[(_y, _x)] += 1
+                    self._record_choice(h, (_nm, _x, _y))
+                    self._v_b4_overrides += 1
+                    self._v_b4_armed = True
+                    return _a
+        except Exception:
+            return None
+        return None
+
     def _replay_pick(self, cands, h):
         while self._replay:
             nm, x, y = self._replay[0]
@@ -2058,7 +2179,7 @@ class MyAgent(Agent):
             return self._simple_pick(simple, h)
         if grid and six:
             try:
-                tg = _targets(grid)
+                tg = _targets(grid, merge_cols=getattr(self, "_vlvl", 0) >= 2)
             except Exception:
                 tg = []
             if tg:
@@ -2075,7 +2196,19 @@ class MyAgent(Agent):
                         scored.append((eff, tu + self._noop_count.get(nm, 0) * 10, self._act_use[nm], (y, x), a))
                 if scored:
                     scored.sort(key=lambda t: (t[0], t[1], t[2]))
-                    _, _, _, (y, x), a = scored[0]
+                    try:
+                        _b2 = getattr(self, "_vlvl", 0) >= 1
+                    except Exception:
+                        _b2 = False
+                    _pool = scored
+                    if _b2:
+                        try:
+                            _fresh = [t for t in scored if (str(t[4]), t[3][1], t[3][0]) not in self._v_global_tried]
+                            if _fresh:
+                                _pool = _fresh
+                        except Exception:
+                            pass
+                    _, _, _, (y, x), a = _pool[0]
                     try:
                         a.set_data({"x": x, "y": y})
                         nm = str(a)
