@@ -15,7 +15,7 @@ pkg.__path__ = [str(VENDOR / "agents")]
 sys.modules["agents"] = pkg
 for _name in ("recorder", "tracing", "agent"):
     _spec = importlib.util.spec_from_file_location("agents." + _name, VENDOR / "agents" / (_name + ".py"))
-    _mod = importlib.module_from_spec(_spec)
+    _mod = importlib.util.module_from_spec(_spec)
     sys.modules["agents." + _name] = _mod
     _spec.loader.exec_module(_mod)
 
@@ -23,7 +23,7 @@ import arc_agi
 from arc_agi import OperationMode
 
 spec = importlib.util.spec_from_file_location("probe_agent", ROOT / "arc-harness" / "real_probe" / "my_agent.py")
-mod = importlib.module_from_spec(spec)
+mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 GBNF = 'root ::= (action | click | "RESET")\naction ::= "ACTION" [1-7]\nclick ::= "CLICK " num " " num\nnum ::= [0-9]+'
