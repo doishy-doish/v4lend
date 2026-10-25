@@ -1,1 +1,4 @@
-my_agent exit=0
+  File "arc-harness/real_probe/my_agent.py", line 937
+    try:
+    ^^^
+SyntaxError: expected 'except' or 'finally' block
