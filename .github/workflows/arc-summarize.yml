@@ -45,6 +45,6 @@ jobs:
       - name: Report issue
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
         run: |
           gh issue create --title "v7.29 probe summaries" --body-file summary.md --repo "$GITHUB_REPOSITORY" || gh issue create --title "v7.29 probe summaries (fallback)" --body "fetch step failed, see run logs" --repo "$GITHUB_REPOSITORY"
