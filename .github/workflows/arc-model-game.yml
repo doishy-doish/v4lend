@@ -30,10 +30,18 @@ jobs:
         env:
           MODEL: ${{ inputs.model }}
         run: |
-          if [ "$MODEL" = "30" ]; then python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-GGUF', allow_patterns=['Qwen3-4B-Q4_K_M.gguf'], local_dir='m')"; echo "m/Qwen3-4B-Q4_K_M.gguf" > .mpath;
-          else python3 -c "from huggingface_hub import snapshot_download; snapshot_download('unsloth/Qwen3.5-4B-GGUF', allow_patterns=['Qwen3.5-4B-Q4_K_M.gguf'], local_dir='m')"; echo "m/Qwen3.5-4B-Q4_K_M.gguf" > .mpath; fi
+          if [ "$MODEL" = "30" ]; then python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-GGUF', allow_patterns=['Qwen3-4B-Q4_K_M.gguf'], local_dir='m')"; find m -name "*.gguf" | head -1 > .mpath;
+          else python3 -c "from huggingface_hub import snapshot_download; snapshot_download('unsloth/Qwen3.5-4B-GGUF', allow_patterns=['Qwen3.5-4B-Q4_K_M.gguf'], local_dir='m')"; find m -name "*.gguf" | head -1 > .mpath; fi
           ls -la m/
-      - run: cd arc-harness/real_probe && timeout 1500 python3 ../../_md.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}" --model "../../$(cat ../../.mpath)" --bestof "${{ inputs.bestof }}" --grammar "${{ inputs.grammar }}" --anneal "${{ inputs.anneal }}"
+      - run: cd arc-harness/real_probe && timeout 1500 python3 ../../_md.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}" --model "../../$(cat ../../.mpath)" --bestof "${{ inputs.bestof }}" --grammar "${{ inputs.grammar }}" --anneal "${{ inputs.anneal }}" > model-trial.log 2>&1; echo "driver exit=$?" >> model-trial.log; tail -c 1500 model-trial.log
+      - name: Commit model log
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
+        run: |
+          for F in arc-harness/real_probe/model-trial.log arc-harness/real_probe/model-stats.json; do B=$(echo $F | tr "/" "-"); B64=$(base64 -w0 $F 2>/dev/null || echo ""); if [ -z "$B64" ]; then echo "missing $F"; continue; fi
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/results/$B" --jq .sha 2>/dev/null || echo "")
+          if [ -z "$SHA" ]; then gh api "repos/$GITHUB_REPOSITORY/contents/results/$B" --method PUT -f message="model log" -f content="$B64" --jq .content.sha; else gh api "repos/$GITHUB_REPOSITORY/contents/results/$B" --method PUT -f message="model log" -f content="$B64" -f sha="$SHA" --jq .content.sha; fi; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
