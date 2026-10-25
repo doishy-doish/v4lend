@@ -23,6 +23,7 @@ jobs:
           cd arc-harness/real_probe && timeout 120 python3 driver.py --game ls20 --max-steps 5 > trial.log 2>&1; echo "trial exit=$?" >> trial.log; cd ../..
           tail -c 3000 arc-harness/real_probe/trial.log
       - name: Commit logs
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
         run: |
