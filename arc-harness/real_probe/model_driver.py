@@ -137,7 +137,7 @@ def main():
     agent = ModelAgent(card_id="probe", game_id=args.game, agent_name="probe", ROOT_URL="http://localhost", record=False, arc_env=env, tags=["probe"])
     agent.MAX_ACTIONS = min(agent.MAX_ACTIONS, args.max_steps)
     agent._llm_obj = llm
-    agent._llm = {"asks": 0, "fallbacks": 0, "toks": 0, "grammar": args.grammar == "on", "grammar_ok": None, "anneal": args.anneal == "on", "err": None}
+    agent._llm = {"asks": 0, "fallbacks": 0, "toks": 0, "grammar": args.grammar == "on", "grammar_ok": None, "anneal": args.anneal == "on", "bestof": max(1, int(args.bestof)), "err": None}
     t1 = time.time()
     agent.main()
     dt = round(time.time() - t1, 1)
