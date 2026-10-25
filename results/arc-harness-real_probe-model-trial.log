@@ -1,10 +1,10 @@
 INFO:arc_agi.scorecard:Initialized ScorecardManager with idle_for=0:15:00 and max_open_for=3 days, 0:00:00
-2026-10-25 05:56:53 | INFO | Got anonymous API key: 0a4b9665-9d03-4ea8-9306-9b5ab3e9a763
-2026-10-25 05:56:53 | INFO | You can register for an API key at https://three.arcprize.org
-2026-10-25 05:56:54 | INFO | Successfully fetched 25 environment(s) from API
-2026-10-25 05:56:54 | INFO | Created new scorecard: afea920c-6163-43ce-9d5b-a6aac571ea64
-2026-10-25 05:56:54 | INFO | Successfully fetched metadata for game vc33
-2026-10-25 05:56:54 | INFO | Successfully downloaded game vc33 (version: 5430563c) to environment_files/vc33/5430563c
-2026-10-25 05:56:54 | INFO | Successfully loaded game class Vc33 from environment_files/vc33/5430563c/vc33.py
-MODEL_RESULT {"game": "vc33", "levels": 0, "actions": 31, "wall_s": 0.1, "llm": {"asks": 0, "fallbacks": 0, "toks": 0, "grammar": true, "grammar_ok": null, "anneal": true, "err": null, "load_s": 1.5, "wall_s": 0.1, "tok_per_s": 0.0}}
+2026-10-25 06:00:38 | INFO | Got anonymous API key: 3d9b96cc-22cf-41ab-b433-282cbb3d631b
+2026-10-25 06:00:38 | INFO | You can register for an API key at https://three.arcprize.org
+2026-10-25 06:00:38 | INFO | Successfully fetched 25 environment(s) from API
+2026-10-25 06:00:38 | INFO | Created new scorecard: 8487c6de-1338-4497-85d2-95c72832ab32
+2026-10-25 06:00:38 | INFO | Successfully fetched metadata for game vc33
+2026-10-25 06:00:39 | INFO | Successfully downloaded game vc33 (version: 5430563c) to environment_files/vc33/5430563c
+2026-10-25 06:00:39 | INFO | Successfully loaded game class Vc33 from environment_files/vc33/5430563c/vc33.py
+MODEL_RESULT {"game": "vc33", "levels": 0, "actions": 11, "wall_s": 0.0, "llm": {"asks": 11, "fallbacks": 0, "toks": 0, "grammar": true, "grammar_ok": null, "anneal": true, "err": "'bestof'", "load_s": 0.9, "wall_s": 0.0, "tok_per_s": 0.0}}
 driver exit=0
