@@ -57,7 +57,17 @@ class ModelAgent(mod.MyAgent):
                 kw = {"max_tokens": 16, "temperature": temp}
                 if L["grammar"]:
                     try:
-                        o = self._llm_obj(prompt, grammar=GBNF, **kw)
+                        go = L.get("grammar_obj")
+                        if go is None:
+                            try:
+                                from llama_cpp import LlamaGrammar
+                                go = LlamaGrammar.from_string(GBNF, verbose=False)
+                                L["grammar_obj"] = go
+                            except Exception:
+                                go = None
+                        if go is None:
+                            raise ValueError("no-grammar-obj")
+                        o = self._llm_obj(prompt, grammar=go, **kw)
                         L["grammar_ok"] = True
                     except Exception:
                         L["grammar_ok"] = False
@@ -142,6 +152,7 @@ def main():
     agent.main()
     dt = round(time.time() - t1, 1)
     L = agent._llm
+    L.pop("grammar_obj", None)
     L["load_s"] = load_s
     L["wall_s"] = dt
     L["tok_per_s"] = round(L["toks"] / max(dt, 0.01), 2)
