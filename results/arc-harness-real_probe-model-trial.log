@@ -1,7 +1,10 @@
-Traceback (most recent call last):
-  File "/home/runner/work/v4lend/v4lend/arc-harness/real_probe/../../_md.py", line 20, in <module>
-    _spec.loader.exec_module(_mod)
-  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
-  File "<frozen importlib._bootstrap_external>", line 1132, in get_code
-  File "<frozen importlib._bootstrap_external>", line 1190, in get_data
-FileNotFoundError: [Errno 2] No such file or directory: '/home/runner/work/vendor/ARC-AGI-3-Agents/agents/recorder.py'
+INFO:arc_agi.scorecard:Initialized ScorecardManager with idle_for=0:15:00 and max_open_for=3 days, 0:00:00
+2026-10-25 05:50:02 | INFO | Got anonymous API key: f0df4acd-c742-43a6-9ab3-684a14a3ad5e
+2026-10-25 05:50:02 | INFO | You can register for an API key at https://three.arcprize.org
+2026-10-25 05:50:02 | INFO | Successfully fetched 25 environment(s) from API
+2026-10-25 05:50:02 | INFO | Created new scorecard: 0270c57f-3a12-4337-b057-12fc3e2e7eb5
+2026-10-25 05:50:02 | INFO | Successfully fetched metadata for game vc33
+2026-10-25 05:50:02 | INFO | Successfully downloaded game vc33 (version: 5430563c) to environment_files/vc33/5430563c
+2026-10-25 05:50:02 | INFO | Successfully loaded game class Vc33 from environment_files/vc33/5430563c/vc33.py
+MODEL_RESULT {"game": "vc33", "levels": 0, "actions": 31, "wall_s": 0.1, "llm": {"asks": 0, "fallbacks": 0, "toks": 0, "grammar": true, "grammar_ok": null, "anneal": true, "err": null, "load_s": 1.4, "wall_s": 0.1, "tok_per_s": 0.0}}
+driver exit=0
