@@ -15,13 +15,20 @@ jobs:
       - name: Compile check
         run: |
           python3 -m py_compile arc-harness/real_probe/my_agent.py > results-lint.log 2>&1; echo "my_agent exit=$?" >> results-lint.log
-          if [ -f arc-harness/real_probe/model_driver.py ]; then python3 -m py_compile arc-harness/real_probe/model_driver.py >> results-lint.log 2>&1; echo "model_driver exit=$?" >> results-lint.log; fi
           cat results-lint.log
-      - name: Commit log
+      - name: Import and trial
+        run: |
+          pip install -q arc-agi pydantic 2>&1 | tail -1; pip install -q arcengine 2>&1 | tail -1 || true
+          git clone --depth 1 https://github.com/arcprize/ARC-AGI-3-Agents.git vendor/ARC-AGI-3-Agents 2>&1 | tail -1
+          cd arc-harness/real_probe && timeout 120 python3 driver.py --game ls20 --max-steps 5 > trial.log 2>&1; echo "trial exit=$?" >> trial.log; cd ../..
+          tail -c 3000 arc-harness/real_probe/trial.log
+      - name: Commit logs
         env:
           GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
         run: |
-          B64=$(base64 -w0 results-lint.log)
-          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/results/lint.log" --jq .sha 2>/dev/null || echo "")
-          if [ -z "$SHA" ]; then gh api "repos/$GITHUB_REPOSITORY/contents/results/lint.log" --method PUT -f message="lint log" -f content="$B64" --jq .content.sha;
-          else gh api "repos/$GITHUB_REPOSITORY/contents/results/lint.log" --method PUT -f message="lint log" -f content="$B64" -f sha="$SHA" --jq .content.sha; fi
+          for F in results-lint.log arc-harness/real_probe/trial.log; do
+            B=$(basename $F .log); B64=$(base64 -w0 $F)
+            SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/results/$B.log" --jq .sha 2>/dev/null || echo "")
+            if [ -z "$SHA" ]; then gh api "repos/$GITHUB_REPOSITORY/contents/results/$B.log" --method PUT -f message="lint log" -f content="$B64" --jq .content.sha;
+            else gh api "repos/$GITHUB_REPOSITORY/contents/results/$B.log" --method PUT -f message="lint log" -f content="$B64" -f sha="$SHA" --jq .content.sha; fi
+          done
