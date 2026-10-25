@@ -1991,6 +1991,17 @@ class MyAgent(Agent):
                 self._ff = self._forced_fire()
             except Exception as _e:
                 self._ff = {"err": str(_e)[:80]}
+        try:
+            _advfn = getattr(self, "_advisor", None)
+        except Exception:
+            _advfn = None
+        if _advfn is not None:
+            try:
+                _adv_act = _advfn(h, grid, simple, six, cands)
+            except Exception:
+                _adv_act = None
+            if _adv_act is not None:
+                return _adv_act
         cands = [a for a in avail if a is not GameAction.RESET]
         simple = [a for a in cands if not _complex(a)]
         six = [a for a in cands if _complex(a)]
