@@ -1,5 +1,7 @@
 Traceback (most recent call last):
-  File "/home/runner/work/v4lend/v4lend/arc-harness/real_probe/../../_md.py", line 18, in <module>
-    _mod = importlib.module_from_spec(_spec)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: module 'importlib' has no attribute 'module_from_spec'
+  File "/home/runner/work/v4lend/v4lend/arc-harness/real_probe/../../_md.py", line 20, in <module>
+    _spec.loader.exec_module(_mod)
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1132, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1190, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/home/runner/work/vendor/ARC-AGI-3-Agents/agents/recorder.py'
