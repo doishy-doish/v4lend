@@ -59,7 +59,7 @@ class ModelAgent(mod.MyAgent):
                     try:
                         o = self._llm_obj(prompt, grammar=GBNF, **kw)
                         L["grammar_ok"] = True
-                    except TypeError:
+                    except Exception:
                         L["grammar_ok"] = False
                         o = self._llm_obj(prompt, **kw)
                 else:
