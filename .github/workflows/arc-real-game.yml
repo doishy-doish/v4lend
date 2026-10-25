@@ -6,6 +6,9 @@ on:
         default: ls20
       max_steps:
         default: "30"
+      variant:
+        description: "Agent variant: base | b2 | b2b3 | b2b3b4"
+        default: "base"
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -18,6 +21,8 @@ jobs:
       - run: pip install -q arc-agi pydantic && (pip install -q arcengine || true)
       - run: git clone --depth 1 https://github.com/arcprize/ARC-AGI-3-Agents.git vendor/ARC-AGI-3-Agents
       - run: cd arc-harness/real_probe && python3 driver.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}"
+        env:
+          DUCK_VARIANT: "${{ inputs.variant }}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
