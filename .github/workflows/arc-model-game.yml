@@ -25,7 +25,6 @@ jobs:
           python-version: "3.12"
       - run: pip install -q arc-agi pydantic huggingface_hub && (pip install -q arcengine || true) && pip install -q llama-cpp-python
       - run: git clone --depth 1 https://github.com/arcprize/ARC-AGI-3-Agents.git vendor/ARC-AGI-3-Agents
-      - run: cp arc-harness/real_probe/model_driver.py ./_md.py
       - name: Download model
         env:
           MODEL: ${{ inputs.model }}
@@ -33,7 +32,7 @@ jobs:
           if [ "$MODEL" = "30" ]; then python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-GGUF', allow_patterns=['Qwen3-4B-Q4_K_M.gguf'], local_dir='m')"; find m -name "*.gguf" | head -1 > .mpath;
           else python3 -c "from huggingface_hub import snapshot_download; snapshot_download('unsloth/Qwen3.5-4B-GGUF', allow_patterns=['Qwen3.5-4B-Q4_K_M.gguf'], local_dir='m')"; find m -name "*.gguf" | head -1 > .mpath; fi
           ls -la m/
-      - run: cd arc-harness/real_probe && timeout 1500 python3 ../../_md.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}" --model "../../$(cat ../../.mpath)" --bestof "${{ inputs.bestof }}" --grammar "${{ inputs.grammar }}" --anneal "${{ inputs.anneal }}" > model-trial.log 2>&1; echo "driver exit=$?" >> model-trial.log; tail -c 1500 model-trial.log
+      - run: cd arc-harness/real_probe && timeout 1500 python3 model_driver.py --game "${{ inputs.game }}" --max-steps "${{ inputs.max_steps }}" --model "../../$(cat ../../.mpath)" --bestof "${{ inputs.bestof }}" --grammar "${{ inputs.grammar }}" --anneal "${{ inputs.anneal }}" > model-trial.log 2>&1; echo "driver exit=$?" >> model-trial.log; tail -c 1500 model-trial.log
       - name: Commit model log
         if: always()
         env:
