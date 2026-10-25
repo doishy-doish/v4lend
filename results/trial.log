@@ -1,0 +1,13 @@
+INFO:arc_agi.scorecard:Initialized ScorecardManager with idle_for=0:15:00 and max_open_for=3 days, 0:00:00
+2026-10-25 04:47:46 | INFO | Got anonymous API key: a922e8fa-7a78-44be-baee-5e94d2658904
+2026-10-25 04:47:46 | INFO | You can register for an API key at https://three.arcprize.org
+2026-10-25 04:47:46 | INFO | Successfully fetched 25 environment(s) from API
+2026-10-25 04:47:46 | INFO | Created new scorecard: a220b79e-5932-4c68-9957-2c9c0eef5146
+2026-10-25 04:47:46 | INFO | Successfully fetched metadata for game ls20
+2026-10-25 04:47:47 | INFO | Successfully downloaded game ls20 (version: 9607627b) to environment_files/ls20/9607627b
+2026-10-25 04:47:47 | INFO | Successfully loaded game class Ls20 from environment_files/ls20/9607627b/ls20.py
+Traceback (most recent call last):
+  File "/home/runner/work/v4lend/v4lend/arc-harness/real_probe/driver.py", line 37, in <module>
+    agent = mod.MyAgent(card_id="probe", game_id=args.game, agent_name="probe", ROOT_URL="http://localhost", record=False, arc_env=env, tags=["probe"])
+            ^^^^^^^^^^^
+AttributeError: module 'probe_agent' has no attribute 'MyAgent'
