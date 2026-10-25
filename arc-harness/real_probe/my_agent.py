@@ -1225,11 +1225,6 @@ class MyAgent(Agent):
                             self._bfs_lc0 = self._best_lc
                             self._bfs_j = 0
                             self._expect_reset = True
-                            try:
-                                self._att = 0
-                                self._gpar = 0
-                            except Exception:
-                                pass
                             self._bfs_turns += 1
                             return GameAction.RESET
                         if self._bfs_j < len(_seq):
@@ -1423,6 +1418,14 @@ class MyAgent(Agent):
             byname.setdefault(str(a), a)
         if "GameAction.ACTION1" not in byname or "GameAction.ACTION2" not in byname:
             return None
+        try:
+            _live = [c for c in _sk_strip_order(grid) if c in SK48_BLOCK_COLORS and c in (8, 6, 14, 9)]
+        except Exception:
+            _live = []
+        if _live:
+            self._skf_order = _live
+            if self._skf_ti >= len(self._skf_order):
+                self._skf_ti = 0
         if self._skf_order is None:
             try:
                 seq = [c for c in _sk_strip_order(grid) if c in SK48_BLOCK_COLORS]
