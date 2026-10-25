@@ -43,4 +43,5 @@ jobs:
           GH_TOKEN: ${{ secrets.ARC_CLASSIC }}
         run: |
           B64=$(base64 -w0 summary.md)
-          gh api "repos/$GITHUB_REPOSITORY/contents/results/v729-summary.md" --method PUT -f message="v7.29 probe summaries" -f content="$B64" --jq .content.sha
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/results/v729-summary.md" --jq .sha 2>/dev/null || echo "")
+          if [ -z "$SHA" ]; then gh api "repos/$GITHUB_REPOSITORY/contents/results/v729-summary.md" --method PUT -f message="v7.29 probe summaries" -f content="$B64" --jq .content.sha; else gh api "repos/$GITHUB_REPOSITORY/contents/results/v729-summary.md" --method PUT -f message="v7.29 probe summaries" -f content="$B64" -f sha="$SHA" --jq .content.sha; fi
