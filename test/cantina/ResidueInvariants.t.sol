@@ -12,6 +12,7 @@ pragma solidity ^0.8.30;
 // instead of rebuilding a harness.
 
 import {IVault} from "src/vault/interfaces/IVault.sol";
+import {V4Vault} from "src/vault/V4Vault.sol";
 import {Test} from "forge-std/Test.sol";
 import {V4VaultHandler} from "test/vault/invariants/V4VaultInvariants.t.sol";
 
@@ -111,12 +112,12 @@ contract ResidueHandler is V4VaultHandler {
 ///         live). Do not "fix" the invariant; file the trace.
 contract ResidueInvariantTest is Test {
     ResidueHandler public handler;
-    IVault public vault;
+    V4Vault public vault;
 
     function setUp() public {
         handler = new ResidueHandler();
         handler.initResidue();
-        vault = IVault(address(handler.vault()));
+        vault = handler.vault();
         targetContract(address(handler));
 
         bytes4[] memory selectors = new bytes4[](12);
