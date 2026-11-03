@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
-// Branch CI copy (poc/cantina-residue). Local record: scratch/v4lend/harness/ResidueInvariants.staged.sol.
+// STAGED RECORD (local). Branch CI copy: test/cantina/ResidueInvariants.t.sol @ poc/cantina-residue.
 // Finding-1 shape covered by test_ResidueRemoveRecreateResurrects (passes by documenting
 // the resurrection); fuzz invariants hold (see contract note on NoDeadApproval).
 // Covers the RESIDUE family (state that outlives a lifecycle boundary):
@@ -206,7 +206,7 @@ contract ResidueInvariantTest is Test {
 
     /// NoDeadApproval (ownership version): a live approval requires the recorded
     /// owner to still hold the loan. NOTE: this cannot catch the remove/re-create
-    /// shape  after liquidate's internal re-add the owner is back to the handler
+    /// shape — after liquidate's internal re-add the owner is back to the handler
     /// with the approval live, so the equality holds. The remove shape is covered
     /// by test_ResidueRemoveRecreateResurrects below, which passes by documenting
     /// the resurrection exactly like StaleApprovalPoC (Finding 1).
