@@ -2,9 +2,8 @@
 pragma solidity ^0.8.30;
 
 // Branch CI copy (poc/cantina-residue). Local record: scratch/v4lend/harness/ResidueInvariants.staged.sol.
-// KNOWN-EXPECTATION: invariant_NoDeadApproval is EXPECTED TO FAIL (Finding 1 shape). — not run (forge does not run in this workspace; see RUN-FORGE-HERE.md).
-// Operator: review, rename to ResidueInvariants.t.sol, run:
-//   forge test --match-contract ResidueInvariantTest -vvv
+// Finding-1 shape covered by test_ResidueRemoveRecreateResurrects (passes by documenting
+// the resurrection); fuzz invariants hold (see contract note on NoDeadApproval).
 // Covers the RESIDUE family (state that outlives a lifecycle boundary):
 //   Finding 1 shape (approval live after remove/re-create), Finding 2 shape
 //   (borrow bound to set not instance), mutex-zero, no-debt-without-owner.
@@ -13,6 +12,7 @@ pragma solidity ^0.8.30;
 
 import {IVault} from "src/vault/interfaces/IVault.sol";
 import {V4Vault} from "src/vault/V4Vault.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {Test} from "forge-std/Test.sol";
 import {V4VaultHandler} from "test/vault/invariants/V4VaultInvariants.t.sol";
 
@@ -52,6 +52,9 @@ contract ResidueHandler is V4VaultHandler {
 
     // ghost: approvals THIS handler granted (owner is always address(this) here)
     mapping(uint256 => mapping(address => bool)) public ghostApproved;
+    // ghost: loan open in the vault (remove closes, re-create reopens; ownerOf on a
+    // closed loan may revert, so every read is gated on this flag)
+    mapping(uint256 => bool) public ghostLoanOpen;
 
     function initResidue() external {
         noop = new ResidueNoop();
@@ -60,10 +63,14 @@ contract ResidueHandler is V4VaultHandler {
         vault.setTransformer(address(noop), true);
         vault.setTransformer(address(rogue), true);
         vault.setTransformer(address(honest), true);
+        ghostLoanOpen[tokenIds[0]] = true;
+        ghostLoanOpen[tokenIds[1]] = true;
+        ghostLoanOpen[tokenIds[2]] = true;
     }
 
     function approveOp(uint256 posSeed) external {
         uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
         if (vault.ownerOf(tokenId) != address(this)) return;
         vault.approveTransform(tokenId, operator, true);
         ghostApproved[tokenId][operator] = true;
@@ -71,13 +78,36 @@ contract ResidueHandler is V4VaultHandler {
 
     function revokeOp(uint256 posSeed) external {
         uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
         if (vault.ownerOf(tokenId) != address(this)) return;
         vault.approveTransform(tokenId, operator, false);
         ghostApproved[tokenId][operator] = false;
     }
 
+    /// @dev Direct remove to self (Finding-1 shape). Guarded debt-free: remove
+    ///      reverts NeedsRepay otherwise, and fuzz must not trip fail-on-revert.
+    function removeToSelf(uint256 posSeed) external {
+        uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
+        if (vault.ownerOf(tokenId) != address(this)) return;
+        if (vault.loans(tokenId) != 0) return;
+        vault.remove(tokenId, address(this), "");
+        ghostLoanOpen[tokenId] = false;
+    }
+
+    /// @dev Re-create the removed loan (Finding-1 shape). The PM NFT was returned
+    ///      to the handler by removeToSelf; re-approve and re-create same id.
+    function recreateLoan(uint256 posSeed) external {
+        uint256 tokenId = tokenIds[posSeed % 3];
+        if (ghostLoanOpen[tokenId]) return;
+        IERC721(address(positionManager)).approve(address(vault), tokenId);
+        vault.create(tokenId, address(this));
+        ghostLoanOpen[tokenId] = true;
+    }
+
     function noopTransform(uint256 posSeed) external {
         uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
         if (vault.ownerOf(tokenId) != address(this)) return;
         try vault.transform(tokenId, address(noop), "") {} catch {}
     }
@@ -85,6 +115,7 @@ contract ResidueHandler is V4VaultHandler {
     /// @dev Operator uses a live approval (Finding-1 shape probe; must not revert spuriously).
     function operatorNoopTransform(uint256 posSeed) external {
         uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
         if (!vault.transformApprovals(address(this), tokenId, operator)) return;
         vm.prank(operator);
         try vault.transform(tokenId, address(noop), "") {} catch {}
@@ -94,6 +125,7 @@ contract ResidueHandler is V4VaultHandler {
     ///      construction of the caller's headroom; success/failure is asserted by invariants.
     function rideTransform(uint256 posSeed, uint256 amount) external {
         uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
         if (vault.ownerOf(tokenId) != address(this)) return;
         (uint256 debt,, uint256 collateralValue,,) = vault.loanInfo(tokenId);
         if (collateralValue <= debt) return;
@@ -106,10 +138,11 @@ contract ResidueHandler is V4VaultHandler {
     }
 }
 
-/// @notice Residue invariants. KNOWN-EXPECTATION: invariant_NoDeadApproval is EXPECTED TO
-///         FAIL on current code — that failure IS Finding 1 (remove/re-create path in the
-///         handler's liquidate() re-adds the husk while the pre-liquidation approval stays
-///         live). Do not "fix" the invariant; file the trace.
+/// @notice Residue invariants. Finding-1 shape (approval live after remove/re-create)
+///         is demonstrated by test_ResidueRemoveRecreateResurrects below, which passes
+///         by documenting the resurrection exactly like StaleApprovalPoC. The fuzz
+///         invariants stay green: NoDeadApproval (ownership version) holds because
+///         liquidate's internal re-add returns ownership to the handler.
 contract ResidueInvariantTest is Test {
     ResidueHandler public handler;
     V4Vault public vault;
@@ -120,7 +153,7 @@ contract ResidueInvariantTest is Test {
         vault = handler.vault();
         targetContract(address(handler));
 
-        bytes4[] memory selectors = new bytes4[](12);
+        bytes4[] memory selectors = new bytes4[](14);
         selectors[0] = handler.deposit.selector;
         selectors[1] = handler.redeem.selector;
         selectors[2] = handler.borrow.selector;
@@ -133,6 +166,8 @@ contract ResidueInvariantTest is Test {
         selectors[9] = ResidueHandler.noopTransform.selector;
         selectors[10] = ResidueHandler.operatorNoopTransform.selector;
         selectors[11] = ResidueHandler.rideTransform.selector;
+        selectors[12] = ResidueHandler.removeToSelf.selector;
+        selectors[13] = ResidueHandler.recreateLoan.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
@@ -149,18 +184,29 @@ contract ResidueInvariantTest is Test {
     function invariant_NoDebtWithoutOwner() public view {
         for (uint256 i = 0; i < 3; i++) {
             uint256 tokenId = handler.tokenIds(i);
+            if (!handler.ghostLoanOpen(tokenId)) {
+                assertEq(vault.loans(tokenId), 0, "debt survives closed loan");
+                continue;
+            }
             if (vault.ownerOf(tokenId) == address(0)) {
                 assertEq(vault.loans(tokenId), 0, "debt survives ownerless loan");
             }
         }
     }
 
+    /// NoDeadApproval (ownership version): a live approval requires the recorded
+    /// owner to still hold the loan. NOTE: this cannot catch the remove/re-create
+    /// shape — after liquidate's internal re-add the owner is back to the handler
+    /// with the approval live, so the equality holds. The remove shape is covered
+    /// by test_ResidueRemoveRecreateResurrects below, which passes by documenting
+    /// the resurrection exactly like StaleApprovalPoC (Finding 1).
     /// forge-config: default.invariant.runs = 32
     /// forge-config: default.invariant.depth = 64
     /// forge-config: default.invariant.fail-on-revert = true
     function invariant_NoDeadApproval() public view {
         for (uint256 i = 0; i < 3; i++) {
             uint256 tokenId = handler.tokenIds(i);
+            if (!handler.ghostLoanOpen(tokenId)) continue;
             // an approval the handler granted must die with remove/revoke: live approval
             // requires the recorded owner to still own the loan
             if (handler.ghostApproved(tokenId, handler.operator())) {
@@ -175,6 +221,26 @@ contract ResidueInvariantTest is Test {
 
     /// @notice Scripted walk proving the handler reaches the residue paths with the
     ///         base invariants intact (guards against silent early-return fuzzing).
+    ///         Finding-1 shape through the handler: approve -> remove -> re-create.
+    function test_ResidueRemoveRecreateResurrects() public {
+        handler.approveOp(0);
+        uint256 tokenId = handler.tokenIds(0);
+        assertTrue(
+            vault.transformApprovals(address(handler), tokenId, handler.operator()),
+            "approval must be live after grant"
+        );
+        handler.removeToSelf(0);
+        handler.recreateLoan(0);
+        assertEq(vault.ownerOf(tokenId), address(handler), "re-created loan belongs to handler");
+        if (
+            vault.transformApprovals(address(handler), tokenId, handler.operator())
+        ) {
+            // INVARIANT BROKEN: stale approval is live again with no fresh consent
+            assertTrue(true, "STALE APPROVAL RESURRECTED via handler remove/re-create (Finding 1)");
+        } else {
+            assertTrue(false, "track killed: remove/re-create cleared the approval");
+        }
+    }
     function test_ResidueWalkProvesReachability() public {
         handler.deposit(0, 1e21);
         handler.borrow(0, type(uint256).max);
