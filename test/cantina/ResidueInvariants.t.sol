@@ -136,6 +136,16 @@ contract ResidueHandler is V4VaultHandler {
         try vault.transform(tokenId, address(honest), "") {} catch {}
         honest.setRide(0, 0);
     }
+
+    /// @dev borrow guarded for fail-on-revert: base borrow reads loanInfo (safe on
+    ///      removed loans) but vault.borrow reverts Unauthorized once removeToSelf
+    ///      deleted tokenOwner. Skip closed loans before any vault call.
+    function guardedBorrow(uint256 posSeed, uint256 amount) external {
+        uint256 tokenId = tokenIds[posSeed % 3];
+        if (!ghostLoanOpen[tokenId]) return;
+        if (vault.ownerOf(tokenId) != address(this)) return;
+        this.borrow(posSeed, amount);
+    }
 }
 
 /// @notice Residue invariants. Finding-1 shape (approval live after remove/re-create)
@@ -156,7 +166,7 @@ contract ResidueInvariantTest is Test {
         bytes4[] memory selectors = new bytes4[](14);
         selectors[0] = handler.deposit.selector;
         selectors[1] = handler.redeem.selector;
-        selectors[2] = handler.borrow.selector;
+        selectors[2] = ResidueHandler.guardedBorrow.selector; // guarded: base borrow reverts post-remove (fail-on-revert)
         selectors[3] = handler.repay.selector;
         selectors[4] = handler.warp.selector;
         selectors[5] = handler.setPositionValue.selector;
@@ -196,7 +206,7 @@ contract ResidueInvariantTest is Test {
 
     /// NoDeadApproval (ownership version): a live approval requires the recorded
     /// owner to still hold the loan. NOTE: this cannot catch the remove/re-create
-    /// shape — after liquidate's internal re-add the owner is back to the handler
+    /// shape  after liquidate's internal re-add the owner is back to the handler
     /// with the approval live, so the equality holds. The remove shape is covered
     /// by test_ResidueRemoveRecreateResurrects below, which passes by documenting
     /// the resurrection exactly like StaleApprovalPoC (Finding 1).
